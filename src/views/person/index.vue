@@ -2,9 +2,9 @@
   <div class="person-page">
     <div class="page-hero">
       <div>
-        <p class="eyebrow">Users</p>
-        <h1>人员管理与画像</h1>
-        <p class="subtitle">结合检索、分组与实时概览，快速掌握当前人员的活跃度、性别与年龄分布。</p>
+        <p class="eyebrow">人员信息</p>
+        <!-- <h1>人员管理与画像</h1>
+        <p class="subtitle">结合检索、分组与实时概览，快速掌握当前人员的活跃度、性别与年龄分布。</p> -->
         <div class="chips">
           <span class="chip">总人数：{{ totalPersons }}</span>
           <span class="chip">本页展示：{{ filteredPersons.length }}</span>
@@ -18,20 +18,9 @@
     </div>
 
     <div class="toolbar">
-      <el-input
-        v-model="searchQuery"
-        placeholder="搜索姓名或工号"
-        clearable
-        :prefix-icon="SearchIcon"
-        @input="handleSearch"
-      />
+      <el-input v-model="searchQuery" placeholder="搜索姓名或工号" clearable :prefix-icon="SearchIcon" @input="handleSearch" />
       <el-select v-model="departmentFilter" placeholder="部门" clearable @change="handleFilter">
-        <el-option
-          v-for="dept in departments"
-          :key="dept"
-          :label="dept"
-          :value="dept"
-        />
+        <el-option v-for="dept in departments" :key="dept" :label="dept" :value="dept" />
       </el-select>
       <el-select v-model="genderFilter" placeholder="性别" clearable @change="handleFilter">
         <el-option label="男" value="Male" />
@@ -56,24 +45,18 @@
         <div class="card-header">
           <div>
             <h3>用户列表</h3>
-            <p class="muted">支持选中、查看详情、编辑与删除。</p>
           </div>
           <el-button size="small" @click="refreshData">刷新数据</el-button>
         </div>
-        <el-table
-          v-loading="loading"
-          :data="pagedPersons"
-          stripe
-          border
-          style="width: 100%"
-          @selection-change="handleSelectionChange"
-        >
+        <el-table v-loading="loading" :data="pagedPersons" stripe border style="width: 100%"
+          @selection-change="handleSelectionChange">
           <el-table-column type="selection" width="45" />
           <el-table-column prop="personId" label="工号" width="110" />
           <el-table-column prop="personName" label="姓名" width="140" />
           <el-table-column prop="gender" label="性别" width="90">
             <template #default="{ row }">
-              <el-tag :type="row.gender === 'Male' ? 'info' : row.gender === 'Female' ? 'success' : 'warning'" effect="light">
+              <el-tag :type="row.gender === 'Male' ? 'info' : row.gender === 'Female' ? 'success' : 'warning'"
+                effect="light">
                 {{ row.gender || '未知' }}
               </el-tag>
             </template>
@@ -93,16 +76,9 @@
           </el-table-column>
         </el-table>
         <div class="table-footer">
-          <el-pagination
-            background
-            layout="prev, pager, next, sizes, total"
-            :current-page="currentPage"
-            :page-size="pageSize"
-            :total="filteredPersons.length"
-            :page-sizes="[10, 20, 50, 100]"
-            @current-change="handleCurrentChange"
-            @size-change="handleSizeChange"
-          />
+          <el-pagination background layout="prev, pager, next, sizes, total" :current-page="currentPage"
+            :page-size="pageSize" :total="filteredPersons.length" :page-sizes="[10, 20, 50, 100]"
+            @current-change="handleCurrentChange" @size-change="handleSizeChange" />
         </div>
       </div>
 
@@ -161,12 +137,7 @@
         </el-form-item>
         <el-form-item label="部门">
           <el-select v-model="currentPerson.department" placeholder="请选择部门" clearable>
-            <el-option
-              v-for="dept in departments"
-              :key="dept"
-              :label="dept"
-              :value="dept"
-            />
+            <el-option v-for="dept in departments" :key="dept" :label="dept" :value="dept" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -178,13 +149,7 @@
 
     <el-dialog v-model="importDialogVisible" title="导入人员" width="480px">
       <p class="muted">当前暂未接入后端导入接口，可在此处上传文件并由后台处理。</p>
-      <el-upload
-        drag
-        action="#"
-        :auto-upload="false"
-        :file-list="fileList"
-        @change="handleFileChange"
-      >
+      <el-upload drag action="#" :auto-upload="false" :file-list="fileList" @change="handleFileChange">
         <i class="el-icon-upload" />
         <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
       </el-upload>
@@ -417,19 +382,20 @@ export default {
     updateCharts() {
       if (this.charts.status) {
         this.charts.status.setOption({
-          title: { text: '活跃概览', left: 'center', textStyle: { fontSize: 14, color: '#4b5563' } },
+          title: { text: '在线状态', left: 'center', textStyle: { fontSize: 14, color: '#4b5563' } },
           tooltip: { trigger: 'item' },
           series: [
             {
               type: 'pie',
               radius: ['40%', '70%'],
+              center: ['50%', '55%'],
               itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
               data: [
-                { value: this.statusStats.active, name: 'Active' },
-                { value: this.statusStats.inactive, name: 'Inactive' },
-                { value: this.statusStats.unknown, name: 'Unlabeled' }
+                { value: this.statusStats.active, name: '在线' },
+                { value: this.statusStats.inactive, name: '离线' },
+                { value: this.statusStats.unknown, name: '未知' }
               ],
-              label: { formatter: '{b}: {d}%'}
+              label: { formatter: '{b}: {d}%' }
             }
           ]
         })
@@ -443,10 +409,11 @@ export default {
             {
               type: 'pie',
               radius: '70%',
+              center: ['50%', '55%'],
               data: [
-                { value: this.genderStats.male, name: 'Male' },
-                { value: this.genderStats.female, name: 'Female' },
-                { value: this.genderStats.other, name: 'Other' }
+                { value: this.genderStats.male, name: '男性' },
+                { value: this.genderStats.female, name: '女性' },
+                // { value: this.genderStats.other, name: '其他' }
               ],
               label: { formatter: '{b}: {c}' }
             }
@@ -642,11 +609,11 @@ export default {
     deletePerson(person) {
       ElMessageBox.confirm(`确定删除 ${person.personName} 吗？`, '提示', {
         type: 'warning'
-      }).then(async() => {
+      }).then(async () => {
         await deletePersonAPI(person.personId)
         ElMessage.success('删除成功')
         this.fetchPersons()
-      }).catch(() => {})
+      }).catch(() => { })
     },
 
     // 批量删除
@@ -656,12 +623,12 @@ export default {
       }
       ElMessageBox.confirm(`确定删除选中的 ${this.selectedPersons.length} 个人员吗？`, '提示', {
         type: 'warning'
-      }).then(async() => {
+      }).then(async () => {
         const personIds = this.selectedPersons.map(p => p.personId)
         await batchDeletePersons(personIds)
         ElMessage.success('批量删除成功')
         this.fetchPersons()
-      }).catch(() => {})
+      }).catch(() => { })
     },
 
     // 显示详情
