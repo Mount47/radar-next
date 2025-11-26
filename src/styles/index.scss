@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+// 这里可以添加全局样式
+body {
+  @apply bg-gray-100 text-gray-800;
+}
