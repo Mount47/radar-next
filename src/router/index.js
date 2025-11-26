@@ -5,7 +5,12 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/person'
+      redirect: '/overview'
+    },
+    {
+      path: '/overview',
+      name: 'Overview',
+      component: () => import('../views/overview/index.vue')
     },
     {
       path: '/person',
@@ -36,6 +41,11 @@ const router = createRouter({
       path: '/realtime/ecg',
       name: 'RealtimeECG',
       component: () => import('../views/realtime/ecg.vue')
+    },
+    {
+      path: '/history',
+      name: 'History',
+      component: () => import('../views/history/index.vue')
     },
     {
       path: '/alert/fall',
