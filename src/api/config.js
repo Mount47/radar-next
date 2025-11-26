@@ -1,7 +1,7 @@
 // API 基础配置
 export const API_CONFIG = {
   // API 基础地址
-  BASE_URL: process.env.VUE_APP_BASE_API || 'http://localhost:8080',
+  BASE_URL: import.meta.env.VITE_APP_BASE_API || 'http://localhost:8080',
 
   // API 端点
   ENDPOINTS: {
@@ -27,7 +27,7 @@ export const API_CONFIG = {
   // WebSocket配置
   WS: {
     // WebSocket基础地址
-    BASE_URL: 'ws://' + (process.env.VUE_APP_SERVER_IP || 'localhost') + ':' + (process.env.VUE_APP_SERVER_PORT || '8080'),
+    BASE_URL: 'ws://' + (import.meta.env.VITE_APP_SERVER_IP || 'localhost') + ':' + (import.meta.env.VITE_APP_SERVER_PORT || '8080'),
 
     // WebSocket端点
     ENDPOINTS: {

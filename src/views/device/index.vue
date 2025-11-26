@@ -2,9 +2,9 @@
   <div class="device-page">
     <div class="page-hero">
       <div class="hero-copy">
-        <p class="eyebrow">Devices</p>
-        <h1>雷达设备管理</h1>
-        <p class="subtitle">统一检索、分组与实时监测入口，快速掌握设备在线率、固件与告警状态。</p>
+        <p class="eyebrow">设备信息</p>
+        <!-- <h1>雷达设备管理</h1>
+        <p class="subtitle">统一检索、分组与实时监测入口，快速掌握设备在线率、固件与告警状态。</p> -->
         <div class="chips">
           <span class="chip">总数：{{ statistics.totalDevices || 0 }}</span>
           <span class="chip success">在线：{{ statistics.onlineDevices || 0 }}</span>

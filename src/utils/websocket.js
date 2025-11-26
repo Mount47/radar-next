@@ -100,8 +100,8 @@ class WebSocketClient {
 
 // 创建生命体征数据的WebSocket连接
 export const vitalSignsWS = (deviceId) => {
-  const serverIp = process.env.VUE_APP_SERVER_IP || 'localhost'
-  const serverPort = process.env.VUE_APP_SERVER_PORT || '8080'
+  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
+  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
   const wsUrl = `ws://${serverIp}:${serverPort}/ws/r60abd1`
   console.log('创建生命体征WebSocket连接:', wsUrl)
   return new WebSocketClient(wsUrl)
@@ -109,8 +109,8 @@ export const vitalSignsWS = (deviceId) => {
 
 // 创建姿态数据的WebSocket连接
 export const postureWS = (deviceId) => {
-  const serverIp = process.env.VUE_APP_SERVER_IP || 'localhost'
-  const serverPort = process.env.VUE_APP_SERVER_PORT || '8080'
+  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
+  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
   const wsUrl = `ws://${serverIp}:${serverPort}/ws/r60abd1`
   console.log('创建姿态WebSocket连接:', wsUrl)
   return new WebSocketClient(wsUrl)
@@ -118,8 +118,8 @@ export const postureWS = (deviceId) => {
 
 // 创建心电图数据的WebSocket连接
 export const ecgWS = (deviceId) => {
-  const serverIp = process.env.VUE_APP_SERVER_IP || 'localhost'
-  const serverPort = process.env.VUE_APP_SERVER_PORT || '8080'
+  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
+  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
   const wsUrl = `ws://${serverIp}:${serverPort}/ws/r60abd1`
   console.log('创建心电图WebSocket连接:', wsUrl)
   return new WebSocketClient(wsUrl)
@@ -127,8 +127,8 @@ export const ecgWS = (deviceId) => {
 
 // 创建R60ABD1设备数据的WebSocket连接
 export const r60abd1WS = (deviceId) => {
-  const serverIp = process.env.VUE_APP_SERVER_IP || 'localhost'
-  const serverPort = process.env.VUE_APP_SERVER_PORT || '8080'
+  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
+  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
   const wsUrl = `ws://${serverIp}:${serverPort}/ws/r60abd1`
   console.log('创建R60ABD1设备WebSocket连接:', wsUrl)
   return new WebSocketClient(wsUrl)
@@ -136,8 +136,8 @@ export const r60abd1WS = (deviceId) => {
 
 // 创建TI6843 Vital设备数据的WebSocket连接
 export const ti6843VitalWS = (deviceId) => {
-  const serverIp = process.env.VUE_APP_SERVER_IP || 'localhost'
-  const serverPort = process.env.VUE_APP_SERVER_PORT || '8080'
+  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
+  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
   const wsUrl = `ws://${serverIp}:${serverPort}/ws/ti6843-vital`
   console.log('创建TI6843 Vital WebSocket连接:', wsUrl)
   return new WebSocketClient(wsUrl)
@@ -145,8 +145,8 @@ export const ti6843VitalWS = (deviceId) => {
 
 // 创建TI6843 Posture设备数据的WebSocket连接
 export const ti6843PostureWS = (deviceId) => {
-  const serverIp = process.env.VUE_APP_SERVER_IP || 'localhost'
-  const serverPort = process.env.VUE_APP_SERVER_PORT || '8080'
+  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
+  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
   const wsUrl = `ws://${serverIp}:${serverPort}/ws/ti6843-posture`
   console.log('创建TI6843 Posture WebSocket连接:', wsUrl)
   return new WebSocketClient(wsUrl)
@@ -154,8 +154,8 @@ export const ti6843PostureWS = (deviceId) => {
 
 // 创建跌倒警报WebSocket连接（原生WebSocket）
 export const fallAlertWS = () => {
-  const serverIp = process.env.VUE_APP_SERVER_IP || 'localhost'
-  const serverPort = process.env.VUE_APP_SERVER_PORT || '8080'
+  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
+  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
   const wsUrl = `ws://${serverIp}:${serverPort}/ws/fall-alert`
   console.log('创建跌倒警报WebSocket连接:', wsUrl)
   

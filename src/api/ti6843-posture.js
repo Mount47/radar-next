@@ -225,7 +225,7 @@ export function getTI6843PostureDevicesHealth() {
  */
 export function getTI6843PostureWebSocketUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = process.env.VUE_APP_WS_HOST || 'localhost:8080'
+  const host = import.meta.env.VITE_APP_WS_HOST || 'localhost:8080'
   return `${protocol}//${host}/ws/ti6843-posture`
 }
 

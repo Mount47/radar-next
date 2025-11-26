@@ -1,36 +1,326 @@
 <template>
-  <div class="app-container">
-    <h1>Posture Monitor</h1>
-    
-    <div class="debug-info">
-      <h2>Person Info</h2>
-      <pre>{{ currentPerson }}</pre>
+  <div class="posture-monitor-page">
+    <!-- 顶部控制栏 -->
+    <div class="monitor-header">
+      <div class="header-info">
+        <h1 class="page-title">人体位姿实时监测</h1>
+        <div class="status-badges">
+          <el-tag :type="getMonitoringStatusType(monitoringStatus)" size="large">
+            {{ monitoringStatus }}
+          </el-tag>
+          <el-tag v-if="postureStatus" :type="getPostureTagType(postureStatus)" size="large">
+            {{ getPostureText(postureStatus) }}
+          </el-tag>
+        </div>
+      </div>
+      <div class="header-actions">
+        <el-button-group>
+          <el-button 
+            :type="isMonitoring ? 'danger' : 'primary'" 
+            @click="toggleMonitoring"
+            :icon="isMonitoring ? 'VideoPause' : 'VideoPlay'"
+          >
+            {{ isMonitoring ? '停止监测' : '开始监测' }}
+          </el-button>
+          <el-button @click="showHistory" icon="Clock">历史数据</el-button>
+          <el-button @click="resetCamera" icon="Refresh">重置视角</el-button>
+        </el-button-group>
+      </div>
     </div>
 
-    <div class="debug-info">
-      <h2>Device Info</h2>
-      <pre>{{ currentDevice }}</pre>
-      <p>Status: {{ currentDevice.status }}</p>
-    </div>
+    <!-- 主内容区域 -->
+    <div class="monitor-content">
+      <!-- 左侧：3D可视化 -->
+      <div class="main-panel">
+        <!-- 3D点云图 -->
+        <div class="chart-card">
+          <div class="card-header">
+            <h3>3D图像点云</h3>
+            <div class="view-controls">
+              <el-dropdown trigger="click">
+                <el-button size="small">
+                  显示选项 <el-icon><ArrowDown /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item @click="setViewMode('both')">
+                      <el-icon><View /></el-icon> 全部显示
+                    </el-dropdown-item>
+                    <el-dropdown-item @click="setViewMode('pointclouds')">
+                      <el-icon><Grid /></el-icon> 仅点云
+                    </el-dropdown-item>
+                    <el-dropdown-item @click="setViewMode('keypoints')">
+                      <el-icon><LocationFilled /></el-icon> 仅关键点
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </div>
+          <div ref="trajectoryContainer" class="visualization-container"></div>
+          <div class="visualization-tip">
+            提示: 鼠标拖动旋转视角，滚轮缩放，右键平移
+          </div>
+        </div>
 
-    <div class="debug-info">
-      <h2>Posture Status</h2>
-      <p>Status: {{ postureStatus }}</p>
-      <p>Last Update: {{ lastUpdateTime }}</p>
-    </div>
+        <!-- 位姿状态卡片 -->
+        <div class="posture-status-card">
+          <div class="status-header">
+            <h3>人体位姿状态</h3>
+            <el-button size="small" type="primary" :icon="isMonitoring ? 'VideoPause' : 'VideoPlay'">
+              {{ monitoringStatus }}
+            </el-button>
+          </div>
+          
+          <div class="posture-display">
+            <div class="posture-icon-large">
+              <div v-if="postureStatus === 'sitting'" class="icon-sitting">
+                <svg viewBox="0 0 100 100" fill="currentColor">
+                  <circle cx="50" cy="20" r="10"/>
+                  <rect x="45" y="30" width="10" height="25" rx="5"/>
+                  <rect x="35" y="35" width="15" height="8" rx="4" transform="rotate(-45 42.5 39)"/>
+                  <rect x="50" y="35" width="15" height="8" rx="4" transform="rotate(45 57.5 39)"/>
+                  <rect x="40" y="55" width="20" height="10" rx="5"/>
+                  <rect x="38" y="65" width="8" height="20" rx="4"/>
+                  <rect x="54" y="65" width="8" height="20" rx="4"/>
+                </svg>
+              </div>
+              <div v-else-if="postureStatus === 'standing'" class="icon-standing">
+                <svg viewBox="0 0 100 100" fill="currentColor">
+                  <circle cx="50" cy="15" r="10"/>
+                  <rect x="45" y="25" width="10" height="35" rx="5"/>
+                  <rect x="35" y="30" width="15" height="8" rx="4" transform="rotate(-20 42.5 34)"/>
+                  <rect x="50" y="30" width="15" height="8" rx="4" transform="rotate(20 57.5 34)"/>
+                  <rect x="43" y="60" width="7" height="30" rx="3.5"/>
+                  <rect x="50" y="60" width="7" height="30" rx="3.5"/>
+                </svg>
+              </div>
+              <div v-else-if="postureStatus === 'walking'" class="icon-walking">
+                <svg viewBox="0 0 100 100" fill="currentColor">
+                  <circle cx="50" cy="15" r="10"/>
+                  <rect x="45" y="25" width="10" height="30" rx="5" transform="rotate(5 50 40)"/>
+                  <rect x="33" y="28" width="15" height="8" rx="4" transform="rotate(-30 40.5 32)"/>
+                  <rect x="52" y="32" width="15" height="8" rx="4" transform="rotate(40 59.5 36)"/>
+                  <rect x="40" y="55" width="8" height="28" rx="4" transform="rotate(20 44 69)"/>
+                  <rect x="48" y="55" width="8" height="28" rx="4" transform="rotate(-15 52 69)"/>
+                </svg>
+              </div>
+              <div v-else-if="postureStatus === 'fall'" class="icon-fall">
+                <svg viewBox="0 0 100 100" fill="currentColor">
+                  <circle cx="30" cy="50" r="10"/>
+                  <rect x="40" y="45" width="35" height="10" rx="5"/>
+                  <rect x="40" y="40" width="8" height="15" rx="4" transform="rotate(-45 44 47.5)"/>
+                  <rect x="67" y="40" width="8" height="15" rx="4" transform="rotate(45 71 47.5)"/>
+                  <rect x="55" y="55" width="10" height="20" rx="5" transform="rotate(30 60 65)"/>
+                  <rect x="65" y="55" width="10" height="20" rx="5" transform="rotate(-10 70 65)"/>
+                </svg>
+              </div>
+              <div v-else class="icon-unknown">
+                <el-icon><QuestionFilled /></el-icon>
+              </div>
+            </div>
+            
+            <div class="posture-info">
+              <div class="current-state">
+                <span class="state-label">当前状态:</span>
+                <span class="state-value" :class="'state-' + postureStatus">
+                  {{ getPostureText(postureStatus) }}
+                </span>
+              </div>
+              <div class="state-icons">
+                <div class="state-item" :class="{ active: postureStatus === 'walking' }">
+                  <span class="state-icon">🚶</span>
+                  <span class="state-name">行走</span>
+                </div>
+                <div class="state-item" :class="{ active: postureStatus === 'fall' }">
+                  <span class="state-icon">🤾</span>
+                  <span class="state-name">跌倒</span>
+                </div>
+                <div class="state-item" :class="{ active: postureStatus === 'standing' }">
+                  <span class="state-icon">🧍</span>
+                  <span class="state-name">站立</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-    <div class="debug-info">
-      <h2>Alerts</h2>
-      <pre>{{ activeFallAlerts }}</pre>
-    </div>
+        <!-- 异常告警 -->
+        <div class="alert-panel" v-if="activeFallAlerts.length > 0">
+          <div class="alert-header">
+            <h3>
+              <el-icon><Warning /></el-icon>
+              跌倒告警详情
+            </h3>
+            <el-button type="danger" size="small" @click="viewAllAlerts">
+              查看全部 ({{ activeFallAlerts.length }})
+            </el-button>
+          </div>
+          <div class="alert-list">
+            <div 
+              v-for="alert in activeFallAlerts.slice(0, 3)" 
+              :key="alert.id"
+              class="alert-item fall-alert"
+            >
+              <div class="alert-content">
+                <div class="alert-user">
+                  <el-avatar :size="32" class="alert-avatar">
+                    <el-icon><User /></el-icon>
+                  </el-avatar>
+                  <div class="alert-user-info">
+                    <span class="user-name">{{ alert.personName || currentPerson.name }}</span>
+                    <span class="alert-time">{{ formatAlertTime(alert.createdAt) }}</span>
+                  </div>
+                </div>
+                <div class="alert-details">
+                  <span class="device-info">设备: {{ alert.deviceId || currentDevice.deviceId }}</span>
+                  <span class="alert-location">位置: {{ alert.location || currentDevice.location }}</span>
+                </div>
+              </div>
+              <div class="alert-actions">
+                <el-button type="warning" size="small" @click="handleMarkPending(alert)">
+                  待处理
+                </el-button>
+                <el-button type="success" size="small" @click="handleMarkResolved(alert)">
+                  已解决
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </div>
 
-    <div class="visualization">
-      <div ref="trajectoryContainer" style="width: 100%; height: 400px; background: #000;"></div>
-    </div>
+        <!-- 通知横幅 -->
+        <div class="notification-banner">
+          <el-icon class="banner-icon"><InfoFilled /></el-icon>
+          <span>主要通知示例</span>
+          <el-button type="text" size="small" class="close-banner">
+            <el-icon><Close /></el-icon>
+          </el-button>
+        </div>
+      </div>
 
-    <div class="actions">
-      <button @click="toggleMonitoring">{{ isMonitoring ? 'Stop' : 'Start' }} Monitoring</button>
-      <button @click="resetCamera">Reset Camera</button>
+      <!-- 右侧：用户和设备信息 -->
+      <div class="side-panel">
+        <!-- 用户信息卡片 -->
+        <div class="info-card user-card">
+          <div class="card-title">
+            <span>用户信息</span>
+            <el-dropdown trigger="click" size="small">
+              <el-button text circle size="small">
+                <el-icon><More /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item>查看详情</el-dropdown-item>
+                  <el-dropdown-item>编辑信息</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+          
+          <div class="user-profile">
+            <el-avatar :size="80" class="user-avatar">
+              <el-icon><User /></el-icon>
+            </el-avatar>
+            <div class="user-info">
+              <h3 class="user-name-title">{{ currentPerson.name || '未知用户' }}</h3>
+              <p class="user-meta">工号: {{ currentPerson.id || '-' }}</p>
+            </div>
+          </div>
+
+          <div class="info-list">
+            <div class="info-item">
+              <span class="info-label">用户ID</span>
+              <span class="info-value">{{ currentPerson.id || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">姓名</span>
+              <span class="info-value">{{ currentPerson.name || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">性别</span>
+              <span class="info-value">{{ currentPerson.gender || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">身份</span>
+              <span class="info-value">{{ currentPerson.identity || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">创建时间</span>
+              <span class="info-value">{{ formatTime(currentPerson.createdAt) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 设备信息卡片 -->
+        <div class="info-card device-card">
+          <div class="card-title">
+            <span>设备信息</span>
+            <el-dropdown trigger="click" size="small">
+              <el-button text circle size="small">
+                <el-icon><More /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item>查看详情</el-dropdown-item>
+                  <el-dropdown-item>设备配置</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+
+          <div class="device-icon-container">
+            <div class="device-icon">
+              <el-icon :size="60" color="#a78bfa">
+                <Coordinate />
+              </el-icon>
+            </div>
+          </div>
+
+          <div class="info-list">
+            <div class="info-item">
+              <el-icon class="item-icon" color="#a78bfa"><Cpu /></el-icon>
+              <div class="item-content">
+                <span class="info-label">设备ID</span>
+                <span class="info-value">{{ currentDevice.deviceId || '-' }}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <el-icon class="item-icon" color="#60a5fa"><Monitor /></el-icon>
+              <div class="item-content">
+                <span class="info-label">设备名称</span>
+                <span class="info-value">{{ currentDevice.name || '-' }}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <el-icon class="item-icon" color="#a78bfa"><Setting /></el-icon>
+              <div class="item-content">
+                <span class="info-label">设备类型</span>
+                <span class="info-value">{{ currentDevice.modelType || 'TI6843-POSTURE' }}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <el-icon class="item-icon" color="#34d399"><CircleCheck /></el-icon>
+              <div class="item-content">
+                <span class="info-label">连接状态</span>
+                <el-tag 
+                  :type="getDeviceStatusType(currentDevice.status)" 
+                  size="small"
+                >
+                  {{ getDeviceStatusText(currentDevice.status) }}
+                </el-tag>
+              </div>
+            </div>
+            <div class="info-item">
+              <el-icon class="item-icon" color="#f59e0b"><Clock /></el-icon>
+              <div class="item-content">
+                <span class="info-label">最后更新</span>
+                <span class="info-value">{{ formatTime(lastUpdateTime) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -62,9 +352,19 @@ import {
 } from '@/api/fall-alert'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import { 
+  VideoPlay, VideoPause, Clock, Refresh, ArrowDown, View, Grid, LocationFilled,
+  Warning, User, InfoFilled, Close, More, Cpu, Monitor, Setting, 
+  CircleCheck, Coordinate, QuestionFilled
+} from '@element-plus/icons-vue'
 
 export default {
   name: 'PostureMonitor',
+  components: {
+    VideoPlay, VideoPause, Clock, Refresh, ArrowDown, View, Grid, LocationFilled,
+    Warning, User, InfoFilled, Close, More, Cpu, Monitor, Setting, 
+    CircleCheck, Coordinate, QuestionFilled
+  },
   data() {
     return {
       // 设备信息（适配TI6843格式）
@@ -1731,3 +2031,498 @@ export default {
   }
 }
 </script>
+
+<style scoped>
+.posture-monitor-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fb 0%, #e8eef5 100%);
+  padding: 20px;
+}
+
+/* 顶部控制栏 */
+.monitor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.status-badges {
+  display: flex;
+  gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* 主内容区域 */
+.monitor-content {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 20px;
+}
+
+/* 主面板 */
+.main-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 图表卡片 */
+.chart-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.view-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.visualization-container {
+  width: 100%;
+  height: 450px;
+  background: #1a1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.visualization-tip {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #6b7280;
+  text-align: center;
+}
+
+/* 位姿状态卡片 */
+.posture-status-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.status-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.posture-display {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.posture-icon-large {
+  width: 140px;
+  height: 140px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(147, 197, 253, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.posture-icon-large svg {
+  width: 80px;
+  height: 80px;
+  color: #a78bfa;
+}
+
+.icon-fall svg {
+  color: #ef4444;
+}
+
+.icon-unknown {
+  font-size: 60px;
+  color: #9ca3af;
+}
+
+.posture-info {
+  flex: 1;
+}
+
+.current-state {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.state-label {
+  font-size: 16px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.state-value {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.state-value.state-sitting {
+  color: #3b82f6;
+}
+
+.state-value.state-standing {
+  color: #10b981;
+}
+
+.state-value.state-walking {
+  color: #f59e0b;
+}
+
+.state-value.state-fall {
+  color: #ef4444;
+}
+
+.state-icons {
+  display: flex;
+  gap: 16px;
+}
+
+.state-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #f9fafb;
+  border: 2px solid transparent;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.state-item.active {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.15), rgba(147, 197, 253, 0.15));
+  border-color: #a78bfa;
+  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.2);
+}
+
+.state-icon {
+  font-size: 32px;
+}
+
+.state-name {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* 异常告警面板 */
+.alert-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid #fecaca;
+  border-left: 4px solid #ef4444;
+}
+
+.alert-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.alert-header h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #dc2626;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alert-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: #fef2f2;
+  border-radius: 10px;
+  border: 1px solid #fecaca;
+}
+
+.alert-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alert-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.alert-avatar {
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
+}
+
+.alert-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name {
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+}
+
+.alert-time {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.alert-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 42px;
+}
+
+.device-info,
+.alert-location {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.alert-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 通知横幅 */
+.notification-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 10px;
+  border: 1px solid #fbbf24;
+  color: #92400e;
+  font-size: 14px;
+}
+
+.banner-icon {
+  font-size: 20px;
+  color: #d97706;
+}
+
+.close-banner {
+  margin-left: auto;
+  color: #92400e;
+}
+
+/* 侧边面板 */
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.info-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  font-weight: 600;
+  color: #374151;
+  font-size: 16px;
+}
+
+/* 用户信息 */
+.user-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.user-avatar {
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
+  font-size: 32px;
+}
+
+.user-info {
+  text-align: center;
+}
+
+.user-name-title {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  color: #111827;
+}
+
+.user-meta {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* 设备图标 */
+.device-icon-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.device-icon {
+  width: 100px;
+  height: 100px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(147, 197, 253, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 信息列表 */
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.item-icon {
+  margin-right: 12px;
+}
+
+.item-content {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.info-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #111827;
+  font-weight: 500;
+}
+
+/* 响应式布局 */
+@media (max-width: 1280px) {
+  .monitor-content {
+    grid-template-columns: 1fr;
+  }
+
+  .posture-display {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .monitor-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .visualization-container {
+    height: 300px;
+  }
+
+  .state-icons {
+    flex-wrap: wrap;
+  }
+}
+</style>

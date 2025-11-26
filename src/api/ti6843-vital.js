@@ -337,8 +337,8 @@ export function getTI6843VitalWebSocketUrl(serverIp = 'localhost', serverPort = 
  * @returns {WebSocket} WebSocket实例
  */
 export function createTI6843VitalWebSocket(config = {}) {
-  const serverIp = config.serverIp || process.env.VUE_APP_SERVER_IP || 'localhost'
-  const serverPort = config.serverPort || process.env.VUE_APP_SERVER_PORT || '8080'
+  const serverIp = config.serverIp || import.meta.env.VITE_APP_SERVER_IP || 'localhost'
+  const serverPort = config.serverPort || import.meta.env.VITE_APP_SERVER_PORT || '8080'
   const wsUrl = getTI6843VitalWebSocketUrl(serverIp, serverPort)
   
   console.log('🔗 创建TI6843 Vital WebSocket连接:', wsUrl)

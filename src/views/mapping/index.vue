@@ -1,6 +1,408 @@
 <template>
-  <div class="mapping-container">
-    <pre>{{ mappings }}</pre>
+  <div class="mapping-page">
+    <div class="page-hero">
+      <div class="hero-copy">
+        <p class="eyebrow">映射管理</p>
+        <div class="chips">
+          <span class="chip">总映射：{{ mappings.length }}</span>
+          <span class="chip success">激活：{{ activeMappingsCount }}</span>
+          <span class="chip warning">停用：{{ inactiveMappingsCount }}</span>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <el-button type="primary" @click="showCreateDialog">新建映射</el-button>
+        <el-button @click="refreshData">刷新</el-button>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜索人员姓名/工号/设备ID"
+        clearable
+        :prefix-icon="SearchIcon"
+        @input="handleFilter"
+      />
+      <el-select v-model="selectedPerson" placeholder="选择人员" clearable @change="handlePersonChange">
+        <el-option
+          v-for="person in persons"
+          :key="person.personId"
+          :label="`${person.personName} (${person.personId})`"
+          :value="person.personId"
+        />
+      </el-select>
+      <el-select v-model="deviceTypeFilter" placeholder="设备类型" clearable @change="handleFilter">
+        <el-option label="人体位姿" value="人体位姿" />
+        <el-option label="呼吸心跳" value="呼吸心跳" />
+        <el-option label="心电" value="心电" />
+      </el-select>
+      <el-select v-model="statusFilter" placeholder="状态" clearable @change="handleFilter">
+        <el-option label="激活" value="active" />
+        <el-option label="停用" value="inactive" />
+      </el-select>
+      <div class="spacer" />
+      <el-checkbox v-model="showInactive" @change="handleShowInactiveChange">显示停用</el-checkbox>
+      <el-button type="primary" link @click="quickMonitorPerson" :disabled="!selectedPerson">快速监测</el-button>
+      <el-button type="primary" link @click="showMultiBindDialog">多设备绑定</el-button>
+      <el-button type="danger" link @click="batchDelete" :disabled="!selectedMappings.length">批量删除</el-button>
+    </div>
+
+    <div class="analytics-grid">
+      <div class="metric-card">
+        <div class="metric-top">
+          <span class="metric-icon" style="background: linear-gradient(135deg, #86efac, #34d399)">
+            <el-icon :size="18"><UserFilled /></el-icon>
+          </span>
+          <p class="metric-label">已绑定人员</p>
+        </div>
+        <div class="metric-value">{{ activeMappingsCount }}</div>
+        <p class="metric-sub">当前活跃映射</p>
+      </div>
+      <div class="metric-card">
+        <div class="metric-top">
+          <span class="metric-icon" style="background: linear-gradient(135deg, #fcd34d, #f59e0b)">
+            <el-icon :size="18"><Monitor /></el-icon>
+          </span>
+          <p class="metric-label">设备利用率</p>
+        </div>
+        <div class="metric-value">{{ deviceUtilizationRate }}%</div>
+        <p class="metric-sub">设备绑定比例</p>
+      </div>
+      <div class="metric-card">
+        <div class="metric-top">
+          <span class="metric-icon" style="background: linear-gradient(135deg, #c7d2fe, #a5b4fc)">
+            <el-icon :size="18"><Connection /></el-icon>
+          </span>
+          <p class="metric-label">映射关系</p>
+        </div>
+        <div class="metric-value">{{ totalMappings }}</div>
+        <p class="metric-sub">包含停用映射</p>
+      </div>
+      <div class="card type-distribution">
+        <h3>设备类型分布</h3>
+        <div class="type-list">
+          <div v-for="item in deviceTypeDistribution" :key="item.type" class="type-row">
+            <div>
+              <el-tag :type="getDeviceTypeColor(item.type)">{{ item.type }}</el-tag>
+              <p class="muted">{{ item.desc }}</p>
+            </div>
+            <div class="type-count">{{ item.count }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-grid">
+      <div class="card list-card">
+        <div class="card-header">
+          <div>
+            <h3>映射列表</h3>
+            <p class="muted">支持选中、批量操作、状态切换与快速监测。</p>
+          </div>
+          <div class="header-actions">
+            <el-button size="small" @click="showDeviceTypeStatus">类型状态</el-button>
+            <el-button size="small" @click="refreshData">刷新数据</el-button>
+          </div>
+        </div>
+        <el-table
+          ref="mappingTable"
+          v-loading="loading"
+          :data="pagedMappings"
+          border
+          stripe
+          style="width: 100%"
+          @selection-change="handleSelectionChange"
+          @row-click="setActiveMapping"
+        >
+          <el-table-column type="selection" width="55" />
+          <el-table-column prop="personId" label="工号" width="120" />
+          <el-table-column label="人员姓名" width="140">
+            <template #default="{ row }">
+              {{ getPersonName(row.personId) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="deviceId" label="设备ID" width="150" />
+          <el-table-column label="设备名称" width="140">
+            <template #default="{ row }">
+              {{ getDeviceName(row.deviceId) || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="监测类型" width="120">
+            <template #default="{ row }">
+              <el-tag :type="getDeviceTypeColor(getDeviceType(row.deviceId))">
+                {{ getDeviceType(row.deviceId) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="mappingName" label="映射名称" />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.isActive ? 'success' : 'info'">
+                {{ row.isActive ? '激活' : '停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="创建时间" width="180">
+            <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="280" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" link size="small" @click.stop="goToMonitor(row)" :disabled="!row.isActive">监测</el-button>
+              <el-button type="primary" link size="small" @click.stop="editMappingItem(row)">编辑</el-button>
+              <el-button 
+                :type="row.isActive ? 'warning' : 'success'" 
+                link 
+                size="small" 
+                @click.stop="toggleMappingStatus(row)"
+              >
+                {{ row.isActive ? '停用' : '激活' }}
+              </el-button>
+              <el-button type="danger" link size="small" @click.stop="deleteMappingItem(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="table-footer">
+          <el-pagination
+            background
+            layout="prev, pager, next, sizes, total"
+            :current-page="currentPage"
+            :page-size="pageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="filteredMappings.length"
+            @current-change="handleCurrentChange"
+            @size-change="handleSizeChange"
+          />
+        </div>
+      </div>
+
+      <div class="side-panel card">
+        <div class="card-header">
+          <div>
+            <h3>映射画像</h3>
+            <p class="muted">点击表格行查看映射详情与操作。</p>
+          </div>
+        </div>
+        <div v-if="activeMapping" class="profile">
+          <div class="avatar-box">{{ getPersonName(activeMapping.personId)?.[0] || 'M' }}</div>
+          <div class="profile-meta">
+            <h4>{{ activeMapping.mappingName || '未命名映射' }}</h4>
+            <p class="muted">{{ getPersonName(activeMapping.personId) }} · {{ getDeviceType(activeMapping.deviceId) }}</p>
+            <p>{{ getDeviceName(activeMapping.deviceId) || activeMapping.deviceId }}</p>
+          </div>
+          <div class="detail-grid">
+            <div>
+              <p class="label">人员工号</p>
+              <p class="value">{{ activeMapping.personId }}</p>
+            </div>
+            <div>
+              <p class="label">设备ID</p>
+              <p class="value">{{ activeMapping.deviceId }}</p>
+            </div>
+            <div>
+              <p class="label">监测类型</p>
+              <p class="value">{{ getDeviceType(activeMapping.deviceId) }}</p>
+            </div>
+            <div>
+              <p class="label">状态</p>
+              <p class="value">{{ activeMapping.isActive ? '激活' : '停用' }}</p>
+            </div>
+          </div>
+          <div class="profile-actions">
+            <el-button type="primary" plain size="small" @click="editMappingItem(activeMapping)">编辑</el-button>
+            <el-button type="primary" plain size="small" @click="goToMonitor(activeMapping)" :disabled="!activeMapping.isActive">跳转监测</el-button>
+          </div>
+        </div>
+        <div v-else class="empty-profile">
+          <p class="muted">请选择左侧列表中的映射查看详情。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 新建映射对话框 -->
+    <el-dialog v-model="createDialogVisible" title="新建映射" width="520px" @close="resetCreateForm">
+      <el-form ref="createForm" :model="newMapping" :rules="createRules" label-width="88px">
+        <el-form-item label="人员" prop="personId">
+          <el-select v-model="newMapping.personId" placeholder="选择人员" filterable>
+            <el-option
+              v-for="person in persons"
+              :key="person.personId"
+              :label="`${person.personName} (${person.personId})`"
+              :value="person.personId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="设备" prop="deviceId">
+          <el-select v-model="newMapping.deviceId" placeholder="选择设备" filterable>
+            <el-option
+              v-for="device in availableDevices"
+              :key="device.deviceId"
+              :label="device.displayName"
+              :value="device.deviceId"
+              :disabled="device.disabled"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="映射名称" prop="mappingName">
+          <el-input v-model="newMapping.mappingName" placeholder="便于识别的名称" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="createMapping">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 多设备绑定对话框 -->
+    <el-dialog v-model="multiBindDialogVisible" title="多设备绑定" width="520px" @close="resetMultiBindForm">
+      <el-form ref="multiBindForm" :model="multiBindData" :rules="multiBindRules" label-width="88px">
+        <el-form-item label="人员" prop="personId">
+          <el-select v-model="multiBindData.personId" placeholder="选择人员" filterable>
+            <el-option
+              v-for="person in persons"
+              :key="person.personId"
+              :label="`${person.personName} (${person.personId})`"
+              :value="person.personId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="设备" prop="deviceIds">
+          <el-select v-model="multiBindData.deviceIds" placeholder="选择多个设备" filterable multiple>
+            <el-option
+              v-for="device in availableDevices"
+              :key="device.deviceId"
+              :label="device.displayName"
+              :value="device.deviceId"
+              :disabled="device.disabled"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="映射名称" prop="mappingName">
+          <el-input v-model="multiBindData.mappingName" placeholder="统一映射名称前缀" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="multiBindDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="createMultiBind">绑定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 交换映射对话框 -->
+    <el-dialog v-model="swapDialogVisible" title="交换映射" width="520px" @close="resetSwapForm">
+      <el-form ref="swapForm" :model="swapData" :rules="swapRules" label-width="88px">
+        <el-form-item label="映射关系1" prop="mappingId1">
+          <el-select v-model="swapData.mappingId1" placeholder="选择第一个映射" @change="handleMappingSelection">
+            <el-option
+              v-for="mapping in activeMappings"
+              :key="mapping.id"
+              :label="`${getPersonName(mapping.personId)} - ${getDeviceName(mapping.deviceId)}`"
+              :value="mapping.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="映射关系2" prop="mappingId2">
+          <el-select v-model="swapData.mappingId2" placeholder="选择第二个映射" @change="handleMappingSelection">
+            <el-option
+              v-for="mapping in activeMappings"
+              :key="mapping.id"
+              :label="`${getPersonName(mapping.personId)} - ${getDeviceName(mapping.deviceId)}`"
+              :value="mapping.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="swapData.mappingId1 && swapData.mappingId2" label="交换预览">
+          <div class="swap-preview">
+            <div class="preview-section">
+              <h5>交换前：</h5>
+              <p>{{ getSwapPreview().before.mapping1 }}</p>
+              <p>{{ getSwapPreview().before.mapping2 }}</p>
+            </div>
+            <div class="preview-section">
+              <h5>交换后：</h5>
+              <p>{{ getSwapPreview().after.mapping1 }}</p>
+              <p>{{ getSwapPreview().after.mapping2 }}</p>
+            </div>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="swapDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="swapMappings">交换</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑映射对话框 -->
+    <el-dialog v-model="editDialogVisible" title="编辑映射" width="520px" @close="resetEditForm">
+      <el-form ref="editForm" :model="editMapping" :rules="createRules" label-width="88px">
+        <el-form-item label="人员" prop="personId">
+          <el-select v-model="editMapping.personId" placeholder="选择人员" filterable>
+            <el-option
+              v-for="person in persons"
+              :key="person.personId"
+              :label="`${person.personName} (${person.personId})`"
+              :value="person.personId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="设备" prop="deviceId">
+          <el-select v-model="editMapping.deviceId" placeholder="选择设备" filterable>
+            <el-option
+              v-for="device in availableDevices"
+              :key="device.deviceId"
+              :label="device.displayName"
+              :value="device.deviceId"
+              :disabled="device.disabled && device.deviceId !== editMapping.deviceId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="映射名称" prop="mappingName">
+          <el-input v-model="editMapping.mappingName" placeholder="便于识别的名称" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-switch v-model="editMapping.isActive" active-text="激活" inactive-text="停用" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="updateMapping">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 设备选择对话框 -->
+    <el-dialog v-model="deviceSelectionDialogVisible" title="选择监测设备" width="420px">
+      <div class="device-selection">
+        <h4>{{ deviceSelectionData.personName }} 的设备列表：</h4>
+        <el-radio-group v-model="deviceSelectionData.selectedDevice">
+          <el-radio
+            v-for="device in deviceSelectionData.availableDevices"
+            :key="device.deviceId"
+            :label="device.deviceId"
+            class="device-radio"
+          >
+            <div class="device-option">
+              <div>
+                <strong>{{ device.deviceName }}</strong>
+                <el-tag :type="getDeviceTypeColor(device.deviceType)" size="small">{{ device.deviceType }}</el-tag>
+              </div>
+              <p class="muted">{{ device.mappingName || device.deviceId }}</p>
+            </div>
+          </el-radio>
+        </el-radio-group>
+      </div>
+      <template #footer>
+        <el-button @click="deviceSelectionDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmDeviceSelection">开始监测</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 清理停用映射对话框 -->
+    <el-dialog v-model="cleanupDialogVisible" title="清理停用映射" width="420px">
+      <p>清理多少天前的停用映射关系？</p>
+      <el-input-number v-model="cleanupConfig.daysOld" :min="1" :max="365" /> 天
+      <template #footer>
+        <el-button @click="cleanupDialogVisible = false">取消</el-button>
+        <el-button type="danger" @click="cleanupInactiveMappingsAction">清理</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -24,11 +426,17 @@ import {
 import { getPersons } from '@/api/person'
 import { getDevices } from '@/api/device'
 import { validateAndFormatMappings } from '@/utils/mapping-validation'
+import { Search, UserFilled, Monitor, Connection } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 export default {
   name: 'MappingManagement',
   data() {
     return {
+      SearchIcon: Search,
+      
+      // 当前活跃的映射
+      activeMapping: null,
       // 视图模式
       viewMode: 'table', // 'table' 或 'graph'
 
@@ -150,6 +558,35 @@ export default {
   },
 
   computed: {
+    // 分页后的映射数据
+    pagedMappings() {
+      const start = (this.currentPage - 1) * this.pageSize
+      const end = this.currentPage * this.pageSize
+      return this.filteredMappings.slice(start, end)
+    },
+
+    // 设备利用率
+    deviceUtilizationRate() {
+      if (this.devices.length === 0) return 0
+      const boundDeviceIds = new Set(this.mappings.filter(m => m.isActive).map(m => m.deviceId))
+      return Math.round((boundDeviceIds.size / this.devices.length) * 100)
+    },
+
+    // 设备类型分布
+    deviceTypeDistribution() {
+      const typeCounts = {}
+      this.mappings.filter(m => m.isActive).forEach(mapping => {
+        const type = this.getDeviceType(mapping.deviceId)
+        typeCounts[type] = (typeCounts[type] || 0) + 1
+      })
+      
+      return Object.entries(typeCounts).map(([type, count]) => ({
+        type,
+        count,
+        desc: this.getTypeDescription(type)
+      }))
+    },
+
     // 可用设备（显示所有设备，标明绑定状态）
     availableDevices() {
       // 获取已映射的设备ID集合
@@ -216,11 +653,22 @@ export default {
 
     // 获取所有数据
     async fetchData() {
-      await Promise.all([
-        this.fetchMappings(),
-        this.fetchPersons(),
-        this.fetchDevices()
-      ])
+      console.log('🔄 开始获取映射页面数据...')
+      try {
+        await Promise.all([
+          this.fetchMappings(),
+          this.fetchPersons(),
+          this.fetchDevices()
+        ])
+        console.log('✅ 数据获取完成:', {
+          mappings: this.mappings.length,
+          persons: this.persons.length,
+          devices: this.devices.length
+        })
+      } catch (error) {
+        console.error('❌ 数据获取失败:', error)
+        ElMessage.error('数据获取失败，请刷新页面重试')
+      }
     },
 
     // 获取映射关系列表
@@ -531,12 +979,17 @@ export default {
     handleSizeChange(val) {
       this.pageSize = val
       this.currentPage = 1
-      this.fetchMappings()
+      // 不重新获取数据，只更新分页
     },
 
     handleCurrentChange(val) {
       this.currentPage = val
-      this.fetchMappings()
+      // 不重新获取数据，只更新分页
+    },
+
+    // 设置活跃映射
+    setActiveMapping(row) {
+      this.activeMapping = row
     },
 
     // 选择变化
@@ -1263,10 +1716,355 @@ export default {
     formatDate(date) {
       if (!date) return ''
       return new Date(date).toLocaleString('zh-CN')
+    },
+
+    // 获取类型描述
+    getTypeDescription(type) {
+      const descriptions = {
+        '人体位姿': '监测位置和姿态',
+        '呼吸心跳': '监测生命体征',
+        '心电': '监测心电活动'
+      }
+      return descriptions[type] || '监测类型'
     }
   }
 }
 </script>
 
 <style scoped>
+.mapping-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.page-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  background: linear-gradient(120deg, rgba(132, 94, 247, 0.12), rgba(94, 233, 255, 0.12));
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 20px;
+  padding: 18px 22px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.06);
+}
+
+.hero-copy h1 {
+  margin: 0;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  margin: 6px 0 10px;
+  color: #6b7280;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #374151;
+  font-weight: 600;
+}
+
+.chip.success {
+  color: #059669;
+}
+
+.chip.warning {
+  color: #d97706;
+}
+
+.chip.info {
+  color: #2563eb;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cta {
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
+  border: none;
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(132, 94, 247, 0.3);
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto auto auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.metric-card {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.72));
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.05);
+}
+
+.metric-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.metric-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.metric-label {
+  margin: 0;
+  color: #6b7280;
+}
+
+.metric-value {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 6px 0 4px;
+}
+
+.metric-sub {
+  margin: 0;
+  color: #9ca3af;
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.05);
+}
+
+.type-distribution h3 {
+  margin: 0 0 10px;
+}
+
+.type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.type-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(132, 94, 247, 0.05);
+}
+
+.type-count {
+  font-weight: 700;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+}
+
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.card-header h3 {
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.muted {
+  color: #9ca3af;
+  margin: 0;
+}
+
+.table-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 4px 4px;
+}
+
+.side-panel {
+  min-height: 100%;
+}
+
+.profile {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.avatar-box {
+  width: 66px;
+  height: 66px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
+  color: #fff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.profile-meta h4 {
+  margin: 0 0 4px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.label {
+  margin: 0 0 4px;
+  color: #9ca3af;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.value {
+  margin: 0;
+  font-weight: 600;
+  color: #111827;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.empty-profile {
+  color: #9ca3af;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.swap-preview {
+  background: #f9fafb;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.preview-section {
+  margin-bottom: 8px;
+}
+
+.preview-section h5 {
+  margin: 0 0 4px;
+  color: #374151;
+  font-size: 13px;
+}
+
+.preview-section p {
+  margin: 2px 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.device-selection h4 {
+  margin: 0 0 12px;
+  color: #374151;
+}
+
+.device-radio {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.device-radio:hover {
+  background: #f9fafb;
+}
+
+.device-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.device-option strong {
+  color: #111827;
+  margin-right: 8px;
+}
+
+@media (max-width: 1200px) {
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .toolbar {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
+  .page-hero {
+    flex-direction: column;
+  }
+
+  .hero-actions {
+    justify-content: flex-end;
+  }
+}
 </style>

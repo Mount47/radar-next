@@ -55,8 +55,8 @@ export function getVitalsAlertsByTimeRange(start, end) {
 
 export function getVitalsAlertWebSocketUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const serverIp = process.env.VUE_APP_SERVER_IP || 'localhost'
-  const serverPort = process.env.VUE_APP_SERVER_PORT || '8080'
+  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
+  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
   return `${protocol}//${serverIp}:${serverPort}/ws/vitals-alert`
 }
 

@@ -1,8 +1,45 @@
-import { EventEmitter } from 'events'
+// import { EventEmitter } from 'events'
 import { API_CONFIG } from '@/api/config'
 import { getDeviceType } from '@/utils/deviceConfig'
 
-class DataManager extends EventEmitter {
+// 简单的 EventEmitter 实现，替代 Node.js 的 events 模块
+class SimpleEventEmitter {
+  constructor() {
+    this.events = {}
+  }
+
+  on(event, listener) {
+    if (!this.events[event]) {
+      this.events[event] = []
+    }
+    this.events[event].push(listener)
+    return this
+  }
+
+  off(event, listener) {
+    if (!this.events[event]) return this
+    this.events[event] = this.events[event].filter(l => l !== listener)
+    return this
+  }
+
+  emit(event, ...args) {
+    if (!this.events[event]) return false
+    this.events[event].forEach(listener => {
+      try {
+        listener.apply(this, args)
+      } catch (e) {
+        console.error(`Error in event listener for ${event}:`, e)
+      }
+    })
+    return true
+  }
+
+  removeListener(event, listener) {
+    return this.off(event, listener)
+  }
+}
+
+class DataManager extends SimpleEventEmitter {
   constructor() {
     super()
     this.ws = null // 原生WebSocket连接

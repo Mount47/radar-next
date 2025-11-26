@@ -1,40 +1,285 @@
 <template>
-  <div class="app-container">
-    <h1>Vital Monitor</h1>
-    
-    <div class="debug-info">
-      <h2>Person Info</h2>
-      <pre>{{ currentPerson }}</pre>
-      <pre>{{ mappingInfo }}</pre>
+  <div class="vital-monitor-page">
+    <!-- 顶部控制栏 -->
+    <div class="monitor-header">
+      <div class="header-info">
+        <h1 class="page-title">呼吸心跳实时监测</h1>
+        <div class="status-badges">
+          <el-tag :type="getMonitoringStatusType(monitoringStatus)" size="large">
+            {{ monitoringStatus }}
+          </el-tag>
+        </div>
+      </div>
+      <div class="header-actions">
+        <el-button-group>
+          <el-button 
+            :type="isMonitoring ? 'danger' : 'primary'" 
+            @click="toggleMonitoring"
+            :icon="isMonitoring ? 'VideoPause' : 'VideoPlay'"
+          >
+            {{ isMonitoring ? '停止监测' : '开始监测' }}
+          </el-button>
+          <el-button @click="showHistory" icon="Clock">历史数据</el-button>
+        </el-button-group>
+      </div>
     </div>
 
-    <div class="debug-info">
-      <h2>Device Info</h2>
-      <pre>{{ currentDevice }}</pre>
-      <p>Status: {{ currentDevice.status }}</p>
-      <p>Type: {{ deviceType }}</p>
-    </div>
+    <!-- 主内容区域 -->
+    <div class="monitor-content">
+      <!-- 左侧：波形图和数据 -->
+      <div class="main-panel">
+        <!-- 实时波形图表 -->
+        <div class="chart-card">
+          <div class="card-header">
+            <h3>实时数据波形</h3>
+            <span class="last-update">最后更新: {{ formatTimestamp(lastUpdateTime) }}</span>
+          </div>
+          <div ref="waveformChart" class="waveform-container"></div>
+        </div>
 
-    <div class="debug-info">
-      <h2>Realtime Data</h2>
-      <p>Breath Rate: {{ breathRate }} ({{ breathStatus }})</p>
-      <p>Heart Rate: {{ heartRate }} ({{ heartStatus }})</p>
-      <p>Motion: {{ motionValue }}</p>
-      <p>Last Update: {{ lastUpdateTime }}</p>
-    </div>
+        <!-- 监测状态卡片组 -->
+        <div class="metrics-grid">
+          <div class="metric-card status-card">
+            <div class="metric-header">
+              <el-icon class="metric-icon" :size="32" color="#a5b4fc">
+                <Monitor />
+              </el-icon>
+              <span class="metric-title">监测状态</span>
+            </div>
+            <div class="metric-value-large">
+              {{ monitoringStatus === '监测中' ? '有人' : '无人' }}
+            </div>
+            <div class="metric-footer">
+              <el-tag :type="getSensorStatusType(sensorConnectionStatus)" size="small">
+                {{ sensorConnectionStatus }}
+              </el-tag>
+            </div>
+          </div>
 
-    <div class="debug-info">
-      <h2>System Status</h2>
-      <p>Monitoring: {{ monitoringStatus }}</p>
-      <p>Sensor Connection: {{ sensorConnectionStatus }}</p>
-      <p>Data Receive: {{ dataReceiveStatus }}</p>
-      <p>Port: {{ port }} ({{ baudRate }})</p>
-    </div>
+          <div class="metric-card exception-card">
+            <div class="metric-header">
+              <el-icon class="metric-icon" :size="32" color="#f87171">
+                <Warning />
+              </el-icon>
+              <span class="metric-title">异常警告</span>
+            </div>
+            <div class="metric-value-large">
+              {{ exceptionCount }}
+            </div>
+            <div class="metric-footer">
+              <span class="metric-label">需要处理的异常</span>
+            </div>
+          </div>
 
-    <div class="actions">
-      <button @click="toggleMonitoring">{{ isMonitoring ? 'Stop' : 'Start' }} Monitoring</button>
-      <button @click="testWebSocket">Test WebSocket</button>
-      <button @click="testR60ABD1APIs">Test API</button>
+          <div class="metric-card breath-card">
+            <div class="metric-header">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23a78bfa'%3E%3Cpath d='M12 2C11.5 2 11 2.19 10.59 2.59L2.59 10.59C1.8 11.37 1.8 12.63 2.59 13.41L10.59 21.41C11.37 22.2 12.63 22.2 13.41 21.41L21.41 13.41C22.2 12.63 22.2 11.37 21.41 10.59L13.41 2.59C13 2.19 12.5 2 12 2M12 4L20 12L12 20L4 12L12 4Z'/%3E%3C/svg%3E" 
+                   class="metric-icon-img" alt="lungs" />
+              <span class="metric-title">呼吸频率</span>
+            </div>
+            <div class="metric-value-large">
+              {{ breathRate }} <span class="unit">次/分</span>
+            </div>
+            <div class="metric-footer">
+              <span :class="['status-indicator', breathStatus]">
+                {{ breathStatus === 'slow' ? '过慢' : breathStatus === 'fast' ? '过快' : '正常' }}
+              </span>
+              <span class="metric-change">{{ breathChangeText }}</span>
+            </div>
+          </div>
+
+          <div class="metric-card heart-card">
+            <div class="metric-header">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23f87171'%3E%3Cpath d='M12,21.35L10.55,20.03C5.4,15.36 2,12.27 2,8.5C2,5.41 4.42,3 7.5,3C9.24,3 10.91,3.81 12,5.08C13.09,3.81 14.76,3 16.5,3C19.58,3 22,5.41 22,8.5C22,12.27 18.6,15.36 13.45,20.03L12,21.35Z'/%3E%3C/svg%3E" 
+                   class="metric-icon-img" alt="heart" />
+              <span class="metric-title">心率</span>
+            </div>
+            <div class="metric-value-large">
+              {{ heartRate }} <span class="unit">bpm</span>
+            </div>
+            <div class="metric-footer">
+              <span :class="['status-indicator', heartStatus]">
+                {{ heartStatus === 'slow' ? '过慢' : (heartStatus === 'fast' ? '过快' : '正常') }}
+              </span>
+              <span class="metric-change">+3% 较上分钟</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 异常告警详情 -->
+        <div class="alert-panel" v-if="hasActiveExceptions">
+          <div class="alert-header">
+            <h3>
+              <el-icon><Warning /></el-icon>
+              异常告警详情
+            </h3>
+            <el-button type="danger" size="small" text @click="dismissAllAlerts">
+              全部处理
+            </el-button>
+          </div>
+          <div class="alert-list">
+            <div 
+              v-for="exception in activeExceptions" 
+              :key="exception.id"
+              class="alert-item"
+            >
+              <div class="alert-content">
+                <div class="alert-user">
+                  <el-avatar :size="32" class="alert-avatar">
+                    <el-icon><User /></el-icon>
+                  </el-avatar>
+                  <span class="user-name">{{ currentPerson.name }}</span>
+                </div>
+                <div class="alert-details">
+                  <span class="device-info">{{ currentDevice.name }}</span>
+                  <span class="device-info">{{ currentDevice.name }}</span>
+                  <span class="alert-reason">{{ exception.explanation }}</span>
+                </div>
+              </div>
+              <el-button 
+                type="danger" 
+                circle 
+                size="small"
+                @click="dismissException(exception.id)"
+              >
+                <el-icon><Close /></el-icon>
+              </el-button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 通知横幅 -->
+        <div class="notification-banner">
+          <el-icon class="banner-icon"><InfoFilled /></el-icon>
+          <span>示例通知信息</span>
+          <el-button type="text" size="small" class="close-banner">
+            <el-icon><Close /></el-icon>
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 右侧：用户和设备信息 -->
+      <div class="side-panel">
+        <!-- 用户信息卡片 -->
+        <div class="info-card user-card">
+          <div class="card-title">
+            <span>用户信息</span>
+            <el-dropdown trigger="click" size="small">
+              <el-button text circle size="small">
+                <el-icon><More /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item>查看详情</el-dropdown-item>
+                  <el-dropdown-item>编辑信息</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+          
+          <div class="user-profile">
+            <el-avatar :size="80" class="user-avatar">
+              <el-icon><User /></el-icon>
+            </el-avatar>
+            <div class="user-info">
+              <h3 class="user-name-title">{{ currentPerson.name || '未知用户' }}</h3>
+              <p class="user-meta">工号: {{ currentPerson.id || '-' }}</p>
+            </div>
+          </div>
+
+          <div class="info-list">
+            <div class="info-item">
+              <span class="info-label">用户ID</span>
+              <span class="info-value">{{ currentPerson.id || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">姓名</span>
+              <span class="info-value">{{ currentPerson.name || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">性别</span>
+              <span class="info-value">{{ currentPerson.gender || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">身份</span>
+              <span class="info-value">{{ currentPerson.identity || '-' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">创建时间</span>
+              <span class="info-value">{{ formatDate(currentPerson.createdAt) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 设备信息卡片 -->
+        <div class="info-card device-card">
+          <div class="card-title">
+            <span>设备信息</span>
+            <el-dropdown trigger="click" size="small">
+              <el-button text circle size="small">
+                <el-icon><More /></el-icon>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item>查看详情</el-dropdown-item>
+                  <el-dropdown-item>设备配置</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+
+          <div class="device-icon-container">
+            <div class="device-icon">
+              <el-icon :size="60" color="#60a5fa">
+                <Odometer />
+              </el-icon>
+            </div>
+          </div>
+
+          <div class="info-list">
+            <div class="info-item">
+              <el-icon class="item-icon" color="#a78bfa"><Cpu /></el-icon>
+              <div class="item-content">
+                <span class="info-label">设备ID</span>
+                <span class="info-value">{{ currentDevice.id || '-' }}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <el-icon class="item-icon" color="#60a5fa"><Monitor /></el-icon>
+              <div class="item-content">
+                <span class="info-label">设备名称</span>
+                <span class="info-value">{{ currentDevice.name || '-' }}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <el-icon class="item-icon" color="#a78bfa"><Setting /></el-icon>
+              <div class="item-content">
+                <span class="info-label">设备类型</span>
+                <span class="info-value">{{ deviceType }}</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <el-icon class="item-icon" color="#34d399"><CircleCheck /></el-icon>
+              <div class="item-content">
+                <span class="info-label">连接状态</span>
+                <el-tag 
+                  :type="getDeviceStatusType(currentDevice.status)" 
+                  size="small"
+                >
+                  {{ getDeviceStatusText(currentDevice.status) }}
+                </el-tag>
+              </div>
+            </div>
+            <div class="info-item">
+              <el-icon class="item-icon" color="#f59e0b"><Clock /></el-icon>
+              <div class="item-content">
+                <span class="info-label">最后更新</span>
+                <span class="info-value">{{ formatTimestamp(lastUpdateTime) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -47,9 +292,18 @@ import dataManager from '@/utils/DataManager'
 import { getPersonRealtimeData, createPersonDeviceMapping, getActivePersonDeviceMappings } from '@/api/r60abd1'
 import { getTI6843DeviceRealtimeData, createTI6843VitalWebSocket } from '@/api/ti6843-vital'
 import { getDevicePortConfig, getDeviceType } from '@/utils/deviceConfig'
+import * as echarts from 'echarts'
+import { 
+  Monitor, Warning, User, Close, InfoFilled, More, Cpu, Setting, 
+  CircleCheck, Clock, Odometer, VideoPlay, VideoPause 
+} from '@element-plus/icons-vue'
 
 export default {
   name: 'VitalMonitor',
+  components: {
+    Monitor, Warning, User, Close, InfoFilled, More, Cpu, Setting, 
+    CircleCheck, Clock, Odometer, VideoPlay, VideoPause
+  },
   data() {
     return {
       dataManager: dataManager,
@@ -86,7 +340,12 @@ export default {
       dataTimeout: null, // 数据超时定时器
       dataTimeoutDuration: 10000, // 10秒无数据认为超时
       lastDataReceiveTime: null, // 最后接收数据时间
-      noDataTimeout: null // 无数据检测定时器
+      noDataTimeout: null, // 无数据检测定时器
+      // ECharts实例
+      waveformChartInstance: null,
+      // 异常告警
+      activeExceptions: [],
+      exceptionCount: 0
     }
   },
   computed: {
@@ -125,6 +384,21 @@ export default {
     // 格式化后的体动数据
     formattedMotionData() {
       return this.motionWaveform.length > 0 ? [...this.motionWaveform] : [0, 0, 0]
+    },
+
+    // 是否有活跃异常
+    hasActiveExceptions() {
+      return this.activeExceptions.length > 0
+    },
+
+    // 呼吸变化文本
+    breathChangeText() {
+      if (this.breathWaveform.length < 2) return '-'
+      const current = this.breathRate
+      const previous = this.breathWaveform[1] || current
+      const change = current - previous
+      if (Math.abs(change) < 1) return '稳定'
+      return change > 0 ? `+${change.toFixed(0)}` : `${change.toFixed(0)}`
     }
   },
   watch: {
@@ -167,6 +441,12 @@ export default {
     const personId = this.$route.query.personId || ''
     const personName = this.$route.query.personName || '未知用户'
     const mappingName = this.$route.query.mappingName || '默认映射'
+
+    // 初始化ECharts
+    this.$nextTick(() => {
+      this.initWaveformChart()
+      window.addEventListener('resize', this.handleChartResize)
+    })
 
     // 添加日志
     console.log('Vital页面 - 初始化')
@@ -238,6 +518,13 @@ export default {
     // 清除计时器和动画帧
     if (this.updateTimer) clearTimeout(this.updateTimer)
     if (this.renderRequestId) cancelAnimationFrame(this.renderRequestId)
+
+    // 销毁ECharts实例
+    if (this.waveformChartInstance) {
+      this.waveformChartInstance.dispose()
+      this.waveformChartInstance = null
+    }
+    window.removeEventListener('resize', this.handleChartResize)
   },
   methods: {
     ...mapActions(useDeviceStore, ['setCurrentDevice']),
@@ -521,6 +808,12 @@ export default {
         this.lastError = null
         this.initialDataLoaded = true
 
+        // 更新图表
+        this.updateWaveformChart()
+
+        // 检查异常
+        this.checkForExceptions()
+
         // --- 强制UI更新 ---
         this.$nextTick(() => {
           this.$forceUpdate()
@@ -657,7 +950,684 @@ export default {
       } catch (error) {
         console.error('断开WebSocket连接失败:', error)
       }
+    },
+
+    // ====================  ECharts图表相关 ====================
+    initWaveformChart() {
+      if (!this.$refs.waveformChart) return
+      
+      this.waveformChartInstance = echarts.init(this.$refs.waveformChart)
+      
+      const option = {
+        backgroundColor: 'transparent',
+        title: {
+          text: '实时生命体征波形',
+          left: 'center',
+          textStyle: {
+            color: '#374151',
+            fontSize: 16,
+            fontWeight: 'normal'
+          }
+        },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {
+            type: 'cross',
+            label: {
+              backgroundColor: '#6a7985'
+            }
+          }
+        },
+        legend: {
+          data: ['心率', '呼吸频率'],
+          top: 35,
+          textStyle: {
+            color: '#6b7280'
+          }
+        },
+        grid: {
+          left: '3%',
+          right: '4%',
+          bottom: '3%',
+          top: 80,
+          containLabel: true
+        },
+        xAxis: {
+          type: 'category',
+          boundaryGap: false,
+          data: Array.from({ length: 30 }, (_, i) => i),
+          axisLine: {
+            lineStyle: {
+              color: '#e5e7eb'
+            }
+          },
+          axisLabel: {
+            color: '#9ca3af',
+            formatter: (value) => {
+              return value === 0 ? '现在' : `-${30 - value}s`
+            }
+          }
+        },
+        yAxis: [
+          {
+            type: 'value',
+            name: '次/分',
+            position: 'left',
+            axisLine: {
+              show: true,
+              lineStyle: {
+                color: '#f87171'
+              }
+            },
+            axisLabel: {
+              color: '#9ca3af'
+            },
+            splitLine: {
+              lineStyle: {
+                color: '#f3f4f6'
+              }
+            }
+          },
+          {
+            type: 'value',
+            name: '次/分',
+            position: 'right',
+            axisLine: {
+              show: true,
+              lineStyle: {
+                color: '#a78bfa'
+              }
+            },
+            axisLabel: {
+              color: '#9ca3af'
+            },
+            splitLine: {
+              show: false
+            }
+          }
+        ],
+        series: [
+          {
+            name: '心率',
+            type: 'line',
+            smooth: true,
+            symbol: 'none',
+            sampling: 'lttb',
+            itemStyle: {
+              color: '#f87171'
+            },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(248, 113, 113, 0.3)' },
+                { offset: 1, color: 'rgba(248, 113, 113, 0.05)' }
+              ])
+            },
+            data: new Array(30).fill(0),
+            yAxisIndex: 0
+          },
+          {
+            name: '呼吸频率',
+            type: 'line',
+            smooth: true,
+            symbol: 'none',
+            sampling: 'lttb',
+            itemStyle: {
+              color: '#a78bfa'
+            },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: 'rgba(167, 139, 250, 0.3)' },
+                { offset: 1, color: 'rgba(167, 139, 250, 0.05)' }
+              ])
+            },
+            data: new Array(30).fill(0),
+            yAxisIndex: 1
+          }
+        ]
+      }
+      
+      this.waveformChartInstance.setOption(option)
+    },
+
+    updateWaveformChart() {
+      if (!this.waveformChartInstance) return
+
+      // 确保数据长度一致
+      const heartData = this.heartWaveform.slice(0, 30)
+      const breathData = this.breathWaveform.slice(0, 30)
+
+      // 填充不足的数据
+      while (heartData.length < 30) heartData.unshift(0)
+      while (breathData.length < 30) breathData.unshift(0)
+
+      // 反转数据,最新的在右边
+      heartData.reverse()
+      breathData.reverse()
+
+      this.waveformChartInstance.setOption({
+        series: [
+          { data: heartData },
+          { data: breathData }
+        ]
+      })
+    },
+
+    handleChartResize() {
+      if (this.waveformChartInstance) {
+        this.waveformChartInstance.resize()
+      }
+    },
+
+    // ==================== UI辅助方法 ====================
+    getDeviceStatusType(status) {
+      const typeMap = {
+        'online': 'success',
+        'offline': 'danger',
+        'maintenance': 'warning'
+      }
+      return typeMap[status] || 'info'
+    },
+
+    getDeviceStatusText(status) {
+      const textMap = {
+        'online': '在线',
+        'offline': '离线',
+        'maintenance': '维护中'
+      }
+      return textMap[status] || '未知'
+    },
+
+    formatDate(date) {
+      if (!date) return '-'
+      try {
+        return new Date(date).toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        })
+      } catch (e) {
+        return '-'
+      }
+    },
+
+    // ==================== 异常告警管理 ====================
+    checkForExceptions() {
+      const newExceptions = []
+
+      // 检查心率异常
+      if (this.heartRate > 100) {
+        newExceptions.push({
+          id: 'high_heart_rate',
+          type: 'heart',
+          explanation: `心率过高: ${this.heartRate} bpm (正常范围: 60-100)`
+        })
+      } else if (this.heartRate < 60 && this.heartRate > 0) {
+        newExceptions.push({
+          id: 'low_heart_rate',
+          type: 'heart',
+          explanation: `心率过低: ${this.heartRate} bpm (正常范围: 60-100)`
+        })
+      }
+
+      // 检查呼吸异常
+      if (this.breathRate > 20) {
+        newExceptions.push({
+          id: 'high_breath_rate',
+          type: 'breath',
+          explanation: `呼吸频率过高: ${this.breathRate} 次/分 (正常范围: 12-20)`
+        })
+      } else if (this.breathRate < 12 && this.breathRate > 0) {
+        newExceptions.push({
+          id: 'low_breath_rate',
+          type: 'breath',
+          explanation: `呼吸频率过低: ${this.breathRate} 次/分 (正常范围: 12-20)`
+        })
+      }
+
+      this.activeExceptions = newExceptions
+      this.exceptionCount = newExceptions.length
+    },
+
+    dismissException(id) {
+      this.activeExceptions = this.activeExceptions.filter(e => e.id !== id)
+      this.exceptionCount = this.activeExceptions.length
+    },
+
+    dismissAllAlerts() {
+      this.activeExceptions = []
+      this.exceptionCount = 0
     }
   }
 }
 </script>
+
+<style scoped>
+.vital-monitor-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fb 0%, #e8eef5 100%);
+  padding: 20px;
+}
+
+/* 顶部控制栏 */
+.monitor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.status-badges {
+  display: flex;
+  gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* 主内容区域 */
+.monitor-content {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 20px;
+}
+
+/* 主面板 */
+.main-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 图表卡片 */
+.chart-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.last-update {
+  font-size: 14px;
+  color: #9ca3af;
+}
+
+.waveform-container {
+  width: 100%;
+  height: 350px;
+}
+
+/* 指标卡片网格 */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.metric-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.metric-icon-img {
+  width: 32px;
+  height: 32px;
+}
+
+.metric-title {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.metric-value-large {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: #9ca3af;
+  margin-left: 4px;
+}
+
+.metric-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.metric-label {
+  color: #9ca3af;
+}
+
+.metric-change {
+  color: #059669;
+  font-weight: 600;
+}
+
+.status-indicator {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.status-indicator.normal {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.status-indicator.slow {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.status-indicator.fast {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* 异常告警面板 */
+.alert-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid #fecaca;
+  border-left: 4px solid #ef4444;
+}
+
+.alert-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.alert-header h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #dc2626;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alert-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  background: #fef2f2;
+  border-radius: 10px;
+  border: 1px solid #fecaca;
+}
+
+.alert-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.alert-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-avatar {
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
+}
+
+.user-name {
+  font-weight: 600;
+  color: #374151;
+}
+
+.alert-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.device-info {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.alert-reason {
+  font-size: 14px;
+  color: #dc2626;
+  font-weight: 500;
+}
+
+/* 通知横幅 */
+.notification-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 10px;
+  border: 1px solid #fbbf24;
+  color: #92400e;
+  font-size: 14px;
+}
+
+.banner-icon {
+  font-size: 20px;
+  color: #d97706;
+}
+
+.close-banner {
+  margin-left: auto;
+  color: #92400e;
+}
+
+/* 侧边面板 */
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.info-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  font-weight: 600;
+  color: #374151;
+  font-size: 16px;
+}
+
+/* 用户信息 */
+.user-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.user-avatar {
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
+  font-size: 32px;
+}
+
+.user-info {
+  text-align: center;
+}
+
+.user-name-title {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  color: #111827;
+}
+
+.user-meta {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* 设备图标 */
+.device-icon-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.device-icon {
+  width: 100px;
+  height: 100px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.1), rgba(147, 197, 253, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 信息列表 */
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.info-item:last-child {
+  border-bottom: none;
+}
+
+.item-icon {
+  margin-right: 12px;
+}
+
+.item-content {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.info-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #111827;
+  font-weight: 500;
+}
+
+/* 响应式布局 */
+@media (max-width: 1280px) {
+  .monitor-content {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .monitor-header {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .waveform-container {
+    height: 250px;
+  }
+}
+</style>
