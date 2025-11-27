@@ -6,3 +6,113 @@
 body {
   @apply bg-gray-100 text-gray-800;
 }
+
+/* ==================== 时间选择器优化样式 ==================== */
+
+/* 日期选择器面板 - 简洁优化 */
+.el-picker-panel {
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* 日期表格表头 */
+.el-date-table th {
+  color: #606266;
+  font-weight: 600;
+  padding: 10px 0;
+}
+
+/* 日期单元格 */
+.el-date-table td.available:hover {
+  color: var(--el-color-primary);
+}
+
+/* 今天 */
+.el-date-table td.today .el-date-table-cell__text {
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+/* 选中的日期 */
+.el-date-table td.current:not(.disabled) .el-date-table-cell__text {
+  background-color: var(--el-color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* 日期范围内的单元格 */
+.el-date-table td.in-range .el-date-table-cell {
+  background-color: #f0f2f5;
+}
+
+/* 开始和结束日期 */
+.el-date-table td.start-date .el-date-table-cell__text,
+.el-date-table td.end-date .el-date-table-cell__text {
+  background-color: var(--el-color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* 快捷选项 */
+.el-picker-panel__sidebar {
+  width: 120px;
+  padding: 8px;
+}
+
+.el-picker-panel__shortcut {
+  padding: 8px 12px;
+  color: #606266;
+  font-size: 14px;
+  line-height: 1.5;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.el-picker-panel__shortcut:hover {
+  background-color: #f0f2f5;
+  color: var(--el-color-primary);
+}
+
+/* 时间选择器 */
+.el-time-spinner__item {
+  height: 32px;
+  line-height: 32px;
+  color: #606266;
+}
+
+.el-time-spinner__item:hover:not(.is-disabled):not(.is-active) {
+  background-color: #f5f7fa;
+}
+
+.el-time-spinner__item.is-active:not(.is-disabled) {
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+/* 底部按钮区域 */
+.el-picker-panel__footer {
+  border-top: 1px solid #e4e7ed;
+  padding: 8px 12px;
+}
+
+/* 输入框状态 */
+.el-date-editor.is-active {
+  border-color: var(--el-color-primary);
+}
+
+.el-date-editor .el-range-separator {
+  line-height: 32px;
+  color: #606266;
+}
+
+/* 响应式 - 移动端隐藏快捷选项 */
+@media (max-width: 768px) {
+  .el-picker-panel__sidebar {
+    display: none;
+  }
+  
+  .el-picker-panel {
+    max-width: 100%;
+  }
+}

@@ -43,14 +43,29 @@ const router = createRouter({
       component: () => import('../views/realtime/ecg.vue')
     },
     {
-      path: '/history',
-      name: 'History',
-      component: () => import('../views/history/index.vue')
+      path: '/historical/vital',
+      name: 'HistoricalVital',
+      component: () => import('../views/historical/vital.vue')
+    },
+    {
+      path: '/historical/posture',
+      name: 'HistoricalPosture',
+      component: () => import('../views/historical/posture.vue')
+    },
+    {
+      path: '/historical/ecg',
+      name: 'HistoricalECG',
+      component: () => import('../views/historical/ecg.vue')
     },
     {
       path: '/alert/fall',
       name: 'FallAlert',
       component: () => import('../views/alert/fallAlert.vue')
+    },
+    {
+      path: '/alert/vitals',
+      name: 'VitalsAlert',
+      component: () => import('../views/alert/vitalsAlert.vue')
     }
   ]
 })

@@ -69,8 +69,8 @@
         size="large"
         :prefix-icon="Search"
       />
-      <ElBadge :value="3" class="badge" type="danger">
-        <ElButton class="icon-button" :icon="BellFilled" circle />
+      <ElBadge :value="totalUnreadAlerts || null" class="badge" type="danger" :hidden="totalUnreadAlerts === 0">
+        <ElButton class="icon-button" :icon="BellFilled" circle @click="goToAlerts" />
       </ElBadge>
       <ElAvatar class="avatar" size="large" :icon="UserFilled" />
     </div>
@@ -82,9 +82,16 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { BellFilled, Search, UserFilled, ArrowDown, Monitor, User as UserIcon, VideoCameraFilled } from '@element-plus/icons-vue'
 import { ElAvatar, ElBadge, ElButton, ElInput, ElIcon } from 'element-plus'
+import { useAlertStore } from '@/stores/alert'
 
 const route = useRoute()
 const router = useRouter()
+const alertStore = useAlertStore()
+
+// 计算未读警报数量
+const totalUnreadAlerts = computed(() => {
+  return alertStore.unreadFallAlertCount + alertStore.criticalVitalsAlertCount
+})
 
 const navItems = [
   { label: '概览', path: '/overview' },
@@ -100,8 +107,23 @@ const navItems = [
       { label: '心电监测', path: '/realtime/ecg'}
     ]
   },
-  { label: '历史数据', path: '/history' },
-  { label: '告警处理', path: '/alert/fall' }
+  { 
+    label: '历史数据', 
+    path: '/historical',
+    children: [
+      { label: '呼吸心跳', path: '/historical/vital'},
+      { label: '人体位姿', path: '/historical/posture'},
+      { label: '心电数据', path: '/historical/ecg'}
+    ]
+  },
+  { 
+    label: '异常监测', 
+    path: '/alert',
+    children: [
+      { label: '跌倒警报', path: '/alert/fall'},
+      { label: '生命体征异常', path: '/alert/vitals'}
+    ]
+  }
 ]
 
 const searchQuery = ref('')
@@ -128,6 +150,10 @@ const handleMouseLeave = () => {
 
 const goHome = () => {
   router.push('/overview')
+}
+
+const goToAlerts = () => {
+  router.push('/alert/fall')
 }
 </script>
 

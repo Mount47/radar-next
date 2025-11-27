@@ -99,6 +99,8 @@ service.interceptors.response.use(
 
     // 处理网络错误
     let message = '请求失败'
+    let showMessage = true // 是否显示错误消息
+    
     if (error.response) {
       // 记录详细错误信息
       console.error('Error Details:', {
@@ -109,6 +111,13 @@ service.interceptors.response.use(
         params: error.config.params,
         data: error.response.data
       })
+      
+      // 检查是否为警报相关的 API（这些可能后端还未实现）
+      const isAlertApi = error.config.url && (
+        error.config.url.includes('/fall-alert') || 
+        error.config.url.includes('/vitals-alert')
+      )
+      
       switch (error.response.status) {
         case 400:
           message = '请求错误 (400): ' + ((error.response.data && error.response.data.message) || '参数有误')
@@ -121,6 +130,11 @@ service.interceptors.response.use(
           break
         case 404:
           message = '请求地址不存在 (404): ' + error.config.url
+          // 如果是警报 API 的 404，不显示弹窗（可能后端未实现）
+          if (isAlertApi) {
+            console.warn('⚠️ 警报 API 未实现:', error.config.url, '（WebSocket 推送功能仍然可用）')
+            showMessage = false
+          }
           break
         case 408:
           message = '请求超时 (408)'
@@ -130,6 +144,11 @@ service.interceptors.response.use(
           break
         case 501:
           message = '服务未实现 (501)'
+          // 如果是警报 API 的 501，不显示弹窗
+          if (isAlertApi) {
+            console.warn('⚠️ 警报 API 未实现:', error.config.url, '（WebSocket 推送功能仍然可用）')
+            showMessage = false
+          }
           break
         case 502:
           message = '网关错误 (502)'
@@ -153,11 +172,14 @@ service.interceptors.response.use(
       message = error.message
     }
 
-    ElMessage({
-      message: message,
-      type: 'error',
-      duration: 5 * 1000
-    })
+    // 只在需要时显示错误消息
+    if (showMessage) {
+      ElMessage({
+        message: message,
+        type: 'error',
+        duration: 5 * 1000
+      })
+    }
 
     return Promise.reject(error)
   }
