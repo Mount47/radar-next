@@ -1423,24 +1423,30 @@ export default {
 
         // 根据设备类型确定跳转路径
         const typeRouteMap = {
-          '人体位姿': '/monitor/posture',
-          '呼吸心跳': '/monitor/vital',
-          '心电': '/monitor/ecg',
+          '人体位姿': '/realtime/posture',
+          '呼吸心跳': '/realtime/vital',
+          '心电': '/realtime/ecg',
           // 兼容其他可能的设备类型名称
-          '人体雷达': '/monitor/posture',
-          '呼吸雷达': '/monitor/vital',
-          '心电雷达': '/monitor/ecg',
+          '人体雷达': '/realtime/posture',
+          '呼吸雷达': '/realtime/vital',
+          '心电雷达': '/realtime/ecg',
           // 兼容物理类型
-          '室内型': '/monitor/vital', // 默认室内型设备为呼吸心跳监测
-          '便携型': '/monitor/vital',
-          '固定型': '/monitor/posture',
+          '室内型': '/realtime/vital', // 默认室内型设备为呼吸心跳监测
+          '便携型': '/realtime/vital',
+          '固定型': '/realtime/posture',
           // 兼容英文类型
-          'vital': '/monitor/vital',
-          'posture': '/monitor/posture',
-          'ecg': '/monitor/ecg',
-          'breath': '/monitor/vital',
-          'pose': '/monitor/posture',
-          'heart': '/monitor/ecg'
+          'vital': '/realtime/vital',
+          'posture': '/realtime/posture',
+          'ecg': '/realtime/ecg',
+          'breath': '/realtime/vital',
+          'pose': '/realtime/posture',
+          'heart': '/realtime/ecg',
+          // 兼容设备型号映射
+          '姿态监测': '/realtime/posture',
+          '人员检测': '/realtime/vital',
+          'TI6843-POSTURE': '/realtime/posture',
+          'TI6843-VITAL': '/realtime/vital',
+          'R60ABD1': '/realtime/vital'
         }
 
         const deviceType = this.getDeviceType(device.deviceId)

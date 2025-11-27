@@ -94,22 +94,39 @@ class DataManager extends SimpleEventEmitter {
     console.log(`🔗 正在建立 ${this.deviceType} WebSocket连接...`)
     
     try {
+      // 确保 API_CONFIG 和 WS 配置存在
+      if (!API_CONFIG || !API_CONFIG.WS || !API_CONFIG.WS.ENDPOINTS) {
+        console.error('❌ API配置未正确加载，使用默认配置')
+      }
+
+      const endpoints = API_CONFIG?.WS?.ENDPOINTS || {
+        R60ABD1: '/ws/r60abd1',
+        TI6843_VITAL: '/ws/ti6843-vital',
+        TI6843_POSTURE: '/ws/ti6843-posture'
+      }
+
       // 根据设备类型选择WebSocket地址
-      let wsEndpoint = API_CONFIG.WS.ENDPOINTS.R60ABD1
+      let wsEndpoint = endpoints.R60ABD1
       
       if (this.deviceType === 'TI6843') {
         // 检查是否为姿态监测设备
         if (this.deviceId && this.deviceId.toUpperCase().includes('POSTURE')) {
-           wsEndpoint = API_CONFIG.WS.ENDPOINTS.TI6843_POSTURE
+           wsEndpoint = endpoints.TI6843_POSTURE
         } else {
-           wsEndpoint = API_CONFIG.WS.ENDPOINTS.TI6843_VITAL
+           wsEndpoint = endpoints.TI6843_VITAL
         }
       } else if (this.deviceType === 'R60ABD1') {
-        wsEndpoint = API_CONFIG.WS.ENDPOINTS.R60ABD1
+        wsEndpoint = endpoints.R60ABD1
       }
 
-      const wsUrl = API_CONFIG.WS.BASE_URL + wsEndpoint
-      console.log(`📡 连接到 WebSocket: ${wsUrl}`)
+      if (!wsEndpoint) {
+        console.error(`❌ 无法为设备类型 ${this.deviceType} 找到对应的 WebSocket 端点，使用默认值`)
+        wsEndpoint = '/ws/r60abd1'
+      }
+
+      const baseUrl = API_CONFIG?.WS?.BASE_URL || 'ws://localhost:8080'
+      const wsUrl = baseUrl + wsEndpoint
+      console.log(`📡 准备连接到 WebSocket: ${wsUrl} (设备类型: ${this.deviceType}, ID: ${this.deviceId})`)
 
       // 创建原生WebSocket连接
       this.ws = new WebSocket(wsUrl)
@@ -139,11 +156,12 @@ class DataManager extends SimpleEventEmitter {
           if (message.type === 'connection_established') {
              console.log('🟢 连接建立确认:', message.message)
           } else if (message.type === 'r60abd1_realtime' || message.type === 'ti6843_vital_realtime') {
-             // console.log(`📊 接收到 ${this.deviceType} 实时数据:`, message.data)
+             console.log(`📊 接收到 ${message.type} 实时数据, 设备ID: ${message.data?.deviceId}`)
              if (message.data) {
                this.handleData(message.data)
              }
           } else {
+             console.log('📨 接收到其他类型消息:', message.type || '未知类型')
              // 尝试直接处理数据（兼容旧格式）
              if (message.deviceId || message.heartRate) {
                 this.handleData(message)
@@ -249,8 +267,10 @@ class DataManager extends SimpleEventEmitter {
           timestamp: latestData.timestamp || Date.now(),
           
           // 生命体征数据 (兼容 R60ABD1 和 TI6843)
+          // TI6843 使用 breathRate, R60ABD1 使用 respiration
           heartRate: latestData.heartRate,
-          respiration: latestData.respiration || latestData.breathRate, // TI6843 uses breathRate
+          respiration: latestData.respiration || latestData.breathRate, // 统一映射为 respiration
+          breathRate: latestData.breathRate || latestData.respiration, // 同时保留 breathRate 字段
           bodyMovement: latestData.bodyMovement,
           
           // 波形数据 (如果有)
@@ -263,7 +283,8 @@ class DataManager extends SimpleEventEmitter {
           sleep: latestData.sleep,
           presenceStatus: latestData.presenceStatus,
           motionStatus: latestData.motionStatus,
-          sleepStatus: latestData.sleepStatus
+          sleepStatus: latestData.sleepStatus,
+          status: latestData.status
         }
       } else {
         processedData = latestData
@@ -275,19 +296,65 @@ class DataManager extends SimpleEventEmitter {
       // 获取数据对应的设备ID
       const dataDeviceId = processedData.deviceId
       
-      // 向特定设备的订阅者发送数据
-      if (dataDeviceId && this.deviceSubscriptions.has(dataDeviceId)) {
-        const subscribers = this.deviceSubscriptions.get(dataDeviceId)
-        console.log(`📡 向设备 ${dataDeviceId} 的 ${subscribers.size} 个订阅者发送数据`)
-        subscribers.forEach(callback => {
-          try {
-            callback(processedData)
-          } catch (error) {
-            console.error(`向设备 ${dataDeviceId} 的订阅者发送数据失败:`, error)
+      // 向特定设备的订阅者发送数据（支持智能模糊匹配）
+      let foundSubscribers = false
+      if (dataDeviceId) {
+        // 遍历所有订阅，查找匹配的设备ID
+        for (const [subscribedDeviceId, subscribers] of this.deviceSubscriptions.entries()) {
+          let isMatch = false
+          
+          // 1. 完全匹配：精确相等
+          if (dataDeviceId === subscribedDeviceId) {
+            isMatch = true
           }
-        })
-      } else {
-        console.log(`📡 设备 ${dataDeviceId} 没有订阅者，跳过数据分发`)
+          // 2. 智能前缀匹配：订阅ID是数据ID的前缀
+          //    例如：订阅 R60ABD1，接收 R60ABD1_COM3
+          //    例如：订阅 TI6843_VITAL，接收 TI6843_VITAL_01
+          //    但：订阅 TI6843 不应匹配 TI6843_VITAL 或 TI6843_POSTURE（需要明确设备类型）
+          else if (dataDeviceId.startsWith(subscribedDeviceId + '_')) {
+            // 对于TI6843设备，确保不会混淆 VITAL 和 POSTURE
+            const isTI6843Base = subscribedDeviceId.toUpperCase() === 'TI6843'
+            const dataHasSubtype = dataDeviceId.toUpperCase().includes('_VITAL') || 
+                                   dataDeviceId.toUpperCase().includes('_POSTURE')
+            
+            // 如果订阅的是基础TI6843但数据有子类型，不匹配（需要明确订阅子类型）
+            if (isTI6843Base && dataHasSubtype) {
+              isMatch = false
+            } else {
+              isMatch = true
+            }
+          }
+          // 3. 反向匹配：数据ID是订阅ID的前缀（用于处理后端简化ID的情况）
+          //    例如：订阅 R60ABD1_COM3，接收 R60ABD1
+          else if (subscribedDeviceId.startsWith(dataDeviceId + '_')) {
+            // 同样对TI6843进行特殊处理
+            const isDataTI6843Base = dataDeviceId.toUpperCase() === 'TI6843'
+            const subscribedHasSubtype = subscribedDeviceId.toUpperCase().includes('_VITAL') || 
+                                         subscribedDeviceId.toUpperCase().includes('_POSTURE')
+            
+            if (isDataTI6843Base && subscribedHasSubtype) {
+              isMatch = false
+            } else {
+              isMatch = true
+            }
+          }
+          
+          if (isMatch && subscribers.size > 0) {
+            foundSubscribers = true
+            console.log(`📡 向设备 ${subscribedDeviceId} 的 ${subscribers.size} 个订阅者发送数据 (数据来自: ${dataDeviceId})`)
+            subscribers.forEach(callback => {
+              try {
+                callback(processedData)
+              } catch (error) {
+                console.error(`向设备 ${subscribedDeviceId} 的订阅者发送数据失败:`, error)
+              }
+            })
+          }
+        }
+        
+        if (!foundSubscribers) {
+          console.warn(`📡 设备 ${dataDeviceId} 没有匹配的订阅者，跳过数据分发. 当前订阅: [${Array.from(this.deviceSubscriptions.keys()).join(', ')}]`)
+        }
       }
       
       // 保持向后兼容：继续发送全局事件（但组件应该迁移到设备特定订阅）

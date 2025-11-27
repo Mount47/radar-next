@@ -728,7 +728,7 @@ export default {
     handleData(data) {
       try {
         // 调试日志：确认 handleData 被调用
-        // console.log('Vital页面 - handleData被调用', data?.deviceId)
+        console.log('✅ Vital页面 - handleData被调用, 设备ID:', data?.deviceId, '数据:', data)
 
         if (!data || typeof data !== 'object') {
           console.warn('Vital页面 - 数据格式无效:', data)
@@ -749,19 +749,13 @@ export default {
           return
         }
 
-        // 如果检测到更具体的设备ID，更新当前设备ID并重新订阅
+        // 如果检测到更具体的设备ID，更新当前设备ID（但不重新订阅，因为模糊匹配已经生效）
         if (isMatch && dataDeviceId && dataDeviceId !== currentDeviceId) {
-          console.log(`🔄 更新设备ID并重新订阅: ${currentDeviceId} -> ${dataDeviceId}`)
+          console.log(`🔄 更新设备ID: ${currentDeviceId} -> ${dataDeviceId}`)
           
-          // 1. 取消旧设备的订阅
-          dataManager.unsubscribeFromDevice(currentDeviceId, this.handleData)
-          
-          // 2. 更新设备ID
+          // 只更新设备ID，不需要重新订阅（因为DataManager已支持模糊匹配）
           this.currentDevice.id = dataDeviceId
           this.updateDevicePortConfig(dataDeviceId)
-          
-          // 3. 订阅新设备
-          dataManager.subscribeToDevice(dataDeviceId, this.handleData)
         }
 
         // 更新人员信息（如果数据中包含）

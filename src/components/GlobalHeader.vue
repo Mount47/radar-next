@@ -5,21 +5,59 @@
         <span class="logo-dot" />
       </div>
       <div class="brand-text">
-        <span class="brand-title">Radar Health</span>
-        <span class="brand-subtitle">Integrated Monitoring</span>
+        <span class="brand-title">毫米波雷达</span>
+        <span class="brand-subtitle">集 成 监 测 系 统</span>
       </div>
     </div>
 
     <nav class="nav-links">
-      <RouterLink
-        v-for="item in navItems"
-        :key="item.path"
-        :to="item.path"
-        class="nav-link"
-        :class="{ active: isActive(item.path) }"
-      >
-        <span class="nav-label">{{ item.label }}</span>
-      </RouterLink>
+      <template v-for="item in navItems" :key="item.path">
+        <!-- 带下拉菜单的导航项 -->
+        <div 
+          v-if="item.children" 
+          class="nav-dropdown"
+          @mouseenter="handleMouseEnter(item)"
+          @mouseleave="handleMouseLeave"
+        >
+          <div
+            class="nav-link"
+            :class="{ active: isActive(item.path) }"
+          >
+            <span class="nav-label">{{ item.label }}</span>
+            <el-icon class="dropdown-icon" :class="{ rotate: activeDropdown === item.label }">
+              <ArrowDown />
+            </el-icon>
+          </div>
+          
+          <!-- 下拉菜单 -->
+          <transition name="dropdown">
+            <div v-show="activeDropdown === item.label" class="dropdown-menu">
+              <RouterLink
+                v-for="child in item.children"
+                :key="child.path"
+                :to="child.path"
+                class="dropdown-item"
+                @click="activeDropdown = null"
+              >
+                <el-icon class="item-icon">
+                  <component :is="child.icon" />
+                </el-icon>
+                <span>{{ child.label }}</span>
+              </RouterLink>
+            </div>
+          </transition>
+        </div>
+
+        <!-- 普通导航项 -->
+        <RouterLink
+          v-else
+          :to="item.path"
+          class="nav-link"
+          :class="{ active: isActive(item.path) }"
+        >
+          <span class="nav-label">{{ item.label }}</span>
+        </RouterLink>
+      </template>
     </nav>
 
     <div class="actions">
@@ -42,8 +80,8 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { BellFilled, Search, UserFilled } from '@element-plus/icons-vue'
-import { ElAvatar, ElBadge, ElButton, ElInput } from 'element-plus'
+import { BellFilled, Search, UserFilled, ArrowDown, Monitor, User as UserIcon, VideoCameraFilled } from '@element-plus/icons-vue'
+import { ElAvatar, ElBadge, ElButton, ElInput, ElIcon } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,16 +91,40 @@ const navItems = [
   { label: '人员', path: '/person' },
   { label: '设备', path: '/device' },
   { label: '人员雷达绑定', path: '/mapping' },
-  { label: '实时监测', path: '/realtime/vital' },
+  { 
+    label: '实时监测', 
+    path: '/realtime',
+    children: [
+      { label: '呼吸心跳', path: '/realtime/vital'},
+      { label: '人体位姿', path: '/realtime/posture'},
+      { label: '心电监测', path: '/realtime/ecg'}
+    ]
+  },
   { label: '历史数据', path: '/history' },
   { label: '告警处理', path: '/alert/fall' }
 ]
 
 const searchQuery = ref('')
+const activeDropdown = ref(null)
+let hideTimeout = null
 
 const activePath = computed(() => route.path)
 
 const isActive = path => activePath.value.startsWith(path)
+
+const handleMouseEnter = (item) => {
+  if (hideTimeout) {
+    clearTimeout(hideTimeout)
+    hideTimeout = null
+  }
+  activeDropdown.value = item.label
+}
+
+const handleMouseLeave = () => {
+  hideTimeout = setTimeout(() => {
+    activeDropdown.value = null
+  }, 200)
+}
 
 const goHome = () => {
   router.push('/overview')
@@ -148,6 +210,9 @@ const goHome = () => {
   color: var(--text-soft);
   text-decoration: none;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .nav-link:hover {
@@ -165,6 +230,77 @@ const goHome = () => {
 
 .nav-label {
   white-space: nowrap;
+}
+
+/* 下拉菜单容器 */
+.nav-dropdown {
+  position: relative;
+}
+
+.dropdown-icon {
+  font-size: 14px;
+  transition: transform 0.3s ease;
+}
+
+.dropdown-icon.rotate {
+  transform: rotate(180deg);
+}
+
+/* 下拉菜单面板 */
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 160px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+  border: 1px solid rgba(132, 94, 247, 0.2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+  padding: 8px;
+  z-index: 100;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--text-soft);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.dropdown-item:hover {
+  color: var(--text-strong);
+  background: linear-gradient(135deg, rgba(132, 94, 247, 0.15), rgba(94, 233, 255, 0.15));
+  transform: translateX(2px);
+}
+
+.item-icon {
+  font-size: 16px;
+  color: var(--primary-500);
+}
+
+/* 下拉动画 */
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition: all 0.25s ease;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.dropdown-enter-to,
+.dropdown-leave-from {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .actions {

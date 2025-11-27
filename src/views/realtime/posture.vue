@@ -59,7 +59,7 @@
           </div>
           <div ref="trajectoryContainer" class="visualization-container"></div>
           <div class="visualization-tip">
-            提示: 鼠标拖动旋转视角，滚轮缩放，右键平移
+            <!-- 提示: 鼠标拖动旋转视角，滚轮缩放，右键平移 -->
           </div>
         </div>
 
@@ -337,7 +337,6 @@ import {
   sendTI6843PostureHeartbeat,
   formatPostureDataForDisplay
 } from '@/api/ti6843-posture'
-import { getTrajectoryByDevice } from '@/api/trajectory'
 // 导入跌倒警报API
 import {
   getActiveFallAlerts,
@@ -664,6 +663,15 @@ export default {
         'fall': '跌倒'
       }
       return textMap[status] || '未知'
+    },
+    
+    getMonitoringStatusType(status) {
+      const typeMap = {
+        '监测中': 'success',
+        '未监测': 'info',
+        '已停止': 'warning'
+      }
+      return typeMap[status] || 'info'
     },
     
     getDeviceStatusType(status) {
@@ -1028,66 +1036,7 @@ export default {
       }
     },
 
-    async fetchTrajectoryData() {
-      try {
-        // TI6843位姿传感器不需要单独的轨迹数据，从位姿数据中提取
-        if (this.currentDevice.modelType === 'TI6843_POSTURE') {
-          console.log('📈 TI6843设备从位姿数据中提取轨迹信息，跳过轨迹API调用')
-          return
-        }
-        
-        // 使用设备ID获取轨迹数据（兼容旧API）
-        const deviceId = this.currentDevice.deviceId || this.currentDevice.id
-        const response = await getTrajectoryByDevice(deviceId)
-        console.log('📈 API返回的轨迹数据:', response)
-
-        // 确保response是数组且不为空
-        if (!Array.isArray(response) || response.length === 0) {
-          console.warn('⚠️ 没有轨迹数据，跳过轨迹展示')
-          return
-        }
-
-        // 获取最新的一条数据
-        const latestData = response[0]
-
-        // 解析position字符串为数组
-        let positionArray
-        try {
-          positionArray = JSON.parse(latestData.position)
-          console.log('解析后的position数组:', positionArray)
-        } catch (e) {
-          console.error('Position解析失败:', e)
-          throw new Error('Position数据格式不正确')
-        }
-
-        // 清空现有点
-        this.trajectoryPoints = []
-        this.displayPoints = []
-
-        // 处理position数组中的坐标点
-        if (Array.isArray(positionArray)) {
-          this.trajectoryPoints = positionArray.map((point, index) => {
-            if (Array.isArray(point) && point.length >= 3) {
-              return {
-                x: point[0],
-                y: point[1],
-                z: point[2],
-                index: index
-              }
-            }
-            return null
-          }).filter(point => point !== null)
-        }
-
-        if (this.trajectoryPoints.length > 0) {
-          console.log(`🎯 成功解析 ${this.trajectoryPoints.length} 个轨迹点，开始动画展示`)
-          this.startAnimation()
-        }
-      } catch (error) {
-        console.error('❌ 获取轨迹数据失败:', error)
-        // 轨迹数据获取失败不影响位姿数据显示
-      }
-    },
+    // fetchTrajectoryData 已删除 - 位姿数据从 ti6843-posture API 获取，不需要单独的轨迹 API
 
     // ==================== 3D可视化控制 ====================
     
@@ -1276,7 +1225,7 @@ export default {
 
       // 创建场景
       this.scene = new THREE.Scene()
-      this.scene.background = new THREE.Color(0x1a1a1a)
+      this.scene.background = new THREE.Color(0xf5f7fb)//3D图像背景色
 
       // 创建相机
       this.camera = new THREE.PerspectiveCamera(75, this.width / this.height, 0.1, 1000)
@@ -2120,7 +2069,7 @@ export default {
 .visualization-container {
   width: 100%;
   height: 450px;
-  background: #1a1a1a;
+  background: #f5f7fb;
   border-radius: 12px;
   overflow: hidden;
 }

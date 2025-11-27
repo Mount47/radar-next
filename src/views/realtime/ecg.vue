@@ -24,7 +24,7 @@
 
 <script>
 // import WaveformChart from '@/components/WaveformChart'
-import { getDeviceECGData } from '@/api/ecg'
+// TODO: ECG API 暂未设计完成，暂时注释掉
 import { mapState, mapActions } from 'pinia'
 import { useDeviceStore } from '@/stores/device'
 import { useStatsStore } from '@/stores/stats'
@@ -182,7 +182,8 @@ export default {
     async fetchECGData() {
       try {
         this.loading = !this.initialDataLoaded // 只在首次加载时显示loading
-        const res = await getDeviceECGData(this.deviceId)
+        // TODO: ECG API 暂未设计完成，使用模拟数据
+        const res = null // await getDeviceECGData(this.deviceId)
         if (res && Array.isArray(res) && res.length > 0) {
           const latestData = res[0]
 
