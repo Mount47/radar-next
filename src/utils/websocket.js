@@ -1,4 +1,4 @@
-// import * as StompJs from '@stomp/stompjs'
+import { API_CONFIG } from '@/api/config'
 
 class WebSocketClient {
   constructor(url) {
@@ -98,110 +98,51 @@ class WebSocketClient {
   }
 }
 
-// 创建生命体征数据的WebSocket连接
-export const vitalSignsWS = (deviceId) => {
-  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
-  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
-  const wsUrl = `ws://${serverIp}:${serverPort}/ws/r60abd1`
-  console.log('创建生命体征WebSocket连接:', wsUrl)
+// 辅助函数：构建完整 WebSocket URL
+const getWsUrl = (endpoint) => {
+  return API_CONFIG.WS.BASE_URL + endpoint
+}
+
+// 1. R60ABD1 呼吸心跳数据 (实时)
+export const createR60ABD1WebSocket = () => {
+  const wsUrl = getWsUrl(API_CONFIG.WS.ENDPOINTS.R60ABD1)
+  console.log('创建R60ABD1 WebSocket连接:', wsUrl)
   return new WebSocketClient(wsUrl)
 }
 
-// 创建姿态数据的WebSocket连接
-export const postureWS = (deviceId) => {
-  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
-  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
-  const wsUrl = `ws://${serverIp}:${serverPort}/ws/r60abd1`
-  console.log('创建姿态WebSocket连接:', wsUrl)
-  return new WebSocketClient(wsUrl)
-}
-
-// 创建心电图数据的WebSocket连接
-export const ecgWS = (deviceId) => {
-  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
-  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
-  const wsUrl = `ws://${serverIp}:${serverPort}/ws/r60abd1`
-  console.log('创建心电图WebSocket连接:', wsUrl)
-  return new WebSocketClient(wsUrl)
-}
-
-// 创建R60ABD1设备数据的WebSocket连接
-export const r60abd1WS = (deviceId) => {
-  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
-  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
-  const wsUrl = `ws://${serverIp}:${serverPort}/ws/r60abd1`
-  console.log('创建R60ABD1设备WebSocket连接:', wsUrl)
-  return new WebSocketClient(wsUrl)
-}
-
-// 创建TI6843 Vital设备数据的WebSocket连接
-export const ti6843VitalWS = (deviceId) => {
-  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
-  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
-  const wsUrl = `ws://${serverIp}:${serverPort}/ws/ti6843-vital`
+// 2. TI6843 呼吸心跳数据 (实时)
+export const createTI6843VitalWebSocket = () => {
+  const wsUrl = getWsUrl(API_CONFIG.WS.ENDPOINTS.TI6843_VITAL)
   console.log('创建TI6843 Vital WebSocket连接:', wsUrl)
   return new WebSocketClient(wsUrl)
 }
 
-// 创建TI6843 Posture设备数据的WebSocket连接
-export const ti6843PostureWS = (deviceId) => {
-  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
-  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
-  const wsUrl = `ws://${serverIp}:${serverPort}/ws/ti6843-posture`
+// 3. TI6843 人体位姿数据 (实时)
+export const createTI6843PostureWebSocket = () => {
+  const wsUrl = getWsUrl(API_CONFIG.WS.ENDPOINTS.TI6843_POSTURE)
   console.log('创建TI6843 Posture WebSocket连接:', wsUrl)
   return new WebSocketClient(wsUrl)
 }
 
-// 创建跌倒警报WebSocket连接（原生WebSocket）
-export const fallAlertWS = () => {
-  const serverIp = import.meta.env.VITE_APP_SERVER_IP || 'localhost'
-  const serverPort = import.meta.env.VITE_APP_SERVER_PORT || '8080'
-  const wsUrl = `ws://${serverIp}:${serverPort}/ws/fall-alert`
+// 4. 跌倒警报 (实时)
+export const createFallAlertWebSocket = () => {
+  const wsUrl = getWsUrl(API_CONFIG.WS.ENDPOINTS.FALL_ALERT)
   console.log('创建跌倒警报WebSocket连接:', wsUrl)
-  
-  const ws = new WebSocket(wsUrl)
-  let heartbeatInterval = null
+  return new WebSocketClient(wsUrl)
+}
 
-  const originalOnOpen = ws.onopen
-  ws.onopen = function(event) {
-    console.log('✅ 跌倒警报WebSocket连接成功')
-    
-    // 启动心跳
-    heartbeatInterval = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'ping' }))
-      }
-    }, 30000)
+// 5. 生命体征异常警报 (实时)
+export const createVitalsAlertWebSocket = () => {
+  const wsUrl = getWsUrl(API_CONFIG.WS.ENDPOINTS.VITALS_ALERT)
+  console.log('创建生命体征异常警报WebSocket连接:', wsUrl)
+  return new WebSocketClient(wsUrl)
+}
 
-    if (originalOnOpen) {
-      originalOnOpen.call(ws, event)
-    }
-  }
-
-  const originalOnClose = ws.onclose
-  ws.onclose = function(event) {
-    console.log('🔌 跌倒警报WebSocket连接关闭')
-    
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval)
-      heartbeatInterval = null
-    }
-
-    if (originalOnClose) {
-      originalOnClose.call(ws, event)
-    }
-  }
-
-  // 添加关闭方法
-  ws.closeConnection = function() {
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval)
-      heartbeatInterval = null
-    }
-    ws.close()
-  }
-
-  return ws
+// 6. 设备状态通知
+export const createDeviceStatusWebSocket = () => {
+  const wsUrl = getWsUrl(API_CONFIG.WS.ENDPOINTS.DEVICE_STATUS)
+  console.log('创建设备状态通知WebSocket连接:', wsUrl)
+  return new WebSocketClient(wsUrl)
 }
 
 export default WebSocketClient

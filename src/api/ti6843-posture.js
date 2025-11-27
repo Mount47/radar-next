@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { API_CONFIG } from '@/api/config'
 
 // TI6843人体位姿传感器API接口
 // 基于TI6843_Posture_API_Documentation.md - 双控制器分离设计
@@ -218,15 +219,17 @@ export function getTI6843PostureDevicesHealth() {
   })
 }
 
+import { createTI6843PostureWebSocket as createWS } from '@/utils/websocket'
+
+// ...existing code...
+
 // ==================== WebSocket工具函数 ====================
 
 /**
  * 获取TI6843位姿WebSocket连接URL
  */
 export function getTI6843PostureWebSocketUrl() {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const host = import.meta.env.VITE_APP_WS_HOST || 'localhost:8080'
-  return `${protocol}//${host}/ws/ti6843-posture`
+  return API_CONFIG.WS.BASE_URL + API_CONFIG.WS.ENDPOINTS.TI6843_POSTURE
 }
 
 /**
@@ -236,37 +239,30 @@ export function getTI6843PostureWebSocketUrl() {
  * @param {Function} onClose 关闭回调函数
  */
 export function createTI6843PostureWebSocket(onMessage, onError, onClose) {
-  const wsUrl = getTI6843PostureWebSocketUrl()
-  console.log('🔗 创建TI6843位姿WebSocket连接:', wsUrl)
+  const client = createWS()
+  const ws = client.ws
   
-  const ws = new WebSocket(wsUrl)
-  
-  ws.onopen = function(event) {
-    console.log('✅ TI6843位姿WebSocket连接成功')
-  }
-  
-  ws.onmessage = function(event) {
-    try {
-      const message = JSON.parse(event.data)
-      if (onMessage) {
-        onMessage(message)
-      }
-    } catch (error) {
-      console.error('❌ WebSocket消息解析失败:', error)
+  if (ws) {
+    // 绑定回调
+    const originalOnMessage = ws.onmessage
+    ws.onmessage = (event) => {
+      if (originalOnMessage) originalOnMessage(event)
+      try {
+        const message = JSON.parse(event.data)
+        if (onMessage) onMessage(message)
+      } catch (e) {}
     }
-  }
-  
-  ws.onerror = function(event) {
-    console.error('❌ TI6843位姿WebSocket连接错误:', event)
-    if (onError) {
-      onError(event)
+    
+    const originalOnError = ws.onerror
+    ws.onerror = (event) => {
+      if (originalOnError) originalOnError(event)
+      if (onError) onError(event)
     }
-  }
-  
-  ws.onclose = function(event) {
-    console.log('🔌 TI6843位姿WebSocket连接关闭')
-    if (onClose) {
-      onClose(event)
+    
+    const originalOnClose = ws.onclose
+    ws.onclose = (event) => {
+      if (originalOnClose) originalOnClose(event)
+      if (onClose) onClose(event)
     }
   }
   

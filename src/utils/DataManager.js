@@ -95,19 +95,17 @@ class DataManager extends SimpleEventEmitter {
     
     try {
       // 根据设备类型选择WebSocket地址
-      let wsEndpoint = API_CONFIG.R60ABD1.WS_ENDPOINT
+      let wsEndpoint = API_CONFIG.WS.ENDPOINTS.R60ABD1
       
       if (this.deviceType === 'TI6843') {
         // 检查是否为姿态监测设备
-        // 假设 deviceId 包含 POSTURE 关键字，或者我们需要更精确的类型判断
-        // 这里简单通过 deviceId 字符串判断
         if (this.deviceId && this.deviceId.toUpperCase().includes('POSTURE')) {
-           wsEndpoint = '/ws/ti6843-posture'
+           wsEndpoint = API_CONFIG.WS.ENDPOINTS.TI6843_POSTURE
         } else {
-           wsEndpoint = '/ws/ti6843-vital' 
+           wsEndpoint = API_CONFIG.WS.ENDPOINTS.TI6843_VITAL
         }
       } else if (this.deviceType === 'R60ABD1') {
-        wsEndpoint = API_CONFIG.R60ABD1.WS_ENDPOINT
+        wsEndpoint = API_CONFIG.WS.ENDPOINTS.R60ABD1
       }
 
       const wsUrl = API_CONFIG.WS.BASE_URL + wsEndpoint

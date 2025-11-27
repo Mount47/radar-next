@@ -18,7 +18,6 @@ export default defineConfig({
     open: true,
     cors: true,
     proxy: {
-      // 这里的代理配置稍后根据原项目 vue.config.js 进行迁移
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,

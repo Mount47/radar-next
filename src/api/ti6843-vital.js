@@ -320,15 +320,20 @@ export function checkTI6843VitalHealth() {
   })
 }
 
+import { createTI6843VitalWebSocket as createWS } from '@/utils/websocket'
+
+// ...existing code...
+
 // ==================== WebSocket工具函数 ====================
 
 /**
  * 获取TI6843 Vital WebSocket连接URL
- * @param {string} serverIp 服务器IP，默认localhost
- * @param {string} serverPort 服务器端口，默认8080
+ * @param {string} serverIp 服务器IP (已废弃，使用config配置)
+ * @param {string} serverPort 服务器端口 (已废弃，使用config配置)
  */
-export function getTI6843VitalWebSocketUrl(serverIp = 'localhost', serverPort = '8080') {
-  return `ws://${serverIp}:${serverPort}/ws/ti6843-vital`
+export function getTI6843VitalWebSocketUrl(serverIp, serverPort) {
+  // 优先使用 API_CONFIG 中的配置
+  return API_CONFIG.WS.BASE_URL + API_CONFIG.WS.ENDPOINTS.TI6843_VITAL
 }
 
 /**
@@ -337,51 +342,42 @@ export function getTI6843VitalWebSocketUrl(serverIp = 'localhost', serverPort = 
  * @returns {WebSocket} WebSocket实例
  */
 export function createTI6843VitalWebSocket(config = {}) {
-  const serverIp = config.serverIp || import.meta.env.VITE_APP_SERVER_IP || 'localhost'
-  const serverPort = config.serverPort || import.meta.env.VITE_APP_SERVER_PORT || '8080'
-  const wsUrl = getTI6843VitalWebSocketUrl(serverIp, serverPort)
+  const client = createWS()
+  const ws = client.ws
   
-  console.log('🔗 创建TI6843 Vital WebSocket连接:', wsUrl)
-  
-  const ws = new WebSocket(wsUrl)
-  
-  // 连接打开事件
-  ws.onopen = () => {
-    console.log('✅ TI6843 Vital WebSocket连接已建立')
-    if (config.onOpen) config.onOpen()
-  }
-  
-  // 消息接收事件
-  ws.onmessage = (event) => {
-    try {
-      const message = JSON.parse(event.data)
-      console.log('📨 收到TI6843 Vital消息:', message.type)
-      
-      if (message.type === 'connection_established') {
-        console.log('✅ 连接确认:', message.message)
-        if (config.onConnectionEstablished) config.onConnectionEstablished(message)
-      } else if (message.type === 'ti6843_vital_realtime') {
-        console.log('📊 实时数据:', message.deviceId, message.data)
-        if (config.onRealtimeData) config.onRealtimeData(message)
-      }
-      
-      if (config.onMessage) config.onMessage(message)
-    } catch (error) {
-      console.error('❌ 解析WebSocket消息失败:', error)
+  // 重新绑定事件处理，以兼容旧的 config 参数方式
+  if (ws) {
+    const originalOnOpen = ws.onopen
+    ws.onopen = (event) => {
+      if (originalOnOpen) originalOnOpen(event)
+      if (config.onOpen) config.onOpen()
+    }
+    
+    const originalOnMessage = ws.onmessage
+    ws.onmessage = (event) => {
+      if (originalOnMessage) originalOnMessage(event)
+      try {
+        const message = JSON.parse(event.data)
+        if (message.type === 'connection_established' && config.onConnectionEstablished) {
+          config.onConnectionEstablished(message)
+        } else if (message.type === 'ti6843_vital_realtime' && config.onRealtimeData) {
+          config.onRealtimeData(message)
+        }
+        if (config.onMessage) config.onMessage(message)
+      } catch (e) {}
+    }
+    
+    const originalOnError = ws.onerror
+    ws.onerror = (error) => {
+      if (originalOnError) originalOnError(error)
       if (config.onError) config.onError(error)
     }
-  }
-  
-  // 错误事件
-  ws.onerror = (error) => {
-    console.error('❌ TI6843 Vital WebSocket错误:', error)
-    if (config.onError) config.onError(error)
-  }
-  
-  // 连接关闭事件
-  ws.onclose = () => {
-    console.log('🔴 TI6843 Vital WebSocket连接已关闭')
-    if (config.onClose) config.onClose()
+    
+    const originalOnClose = ws.onclose
+    ws.onclose = () => {
+      if (originalOnClose) originalOnClose()
+      if (config.onClose) config.onClose()
+    }
   }
   
   return ws

@@ -7,16 +7,7 @@ export const API_CONFIG = {
   ENDPOINTS: {
     // 雷达设备相关
     DEVICES: '/api/radar/devices',
-
-    // 生命体征相关
-    VITAL_SIGNS: '/api/vital-signs',
-
-    // 轨迹相关
-    TRAJECTORY: '/api/trajectory',
-
-    // 位姿相关
-    POSE: '/api/pose',
-
+    
     // 人员管理相关
     PERSONS: '/api/persons',
 
@@ -29,22 +20,25 @@ export const API_CONFIG = {
     // WebSocket基础地址
     BASE_URL: 'ws://' + (import.meta.env.VITE_APP_SERVER_IP || 'localhost') + ':' + (import.meta.env.VITE_APP_SERVER_PORT || '8080'),
 
-    // WebSocket端点
+    // WebSocket端点 (基于 docs/websocket接口.md)
     ENDPOINTS: {
-      // 生命体征实时数据
-      VITAL: '/ws/vital',
+      // R60ABD1 呼吸心跳数据 (实时)
+      R60ABD1: '/ws/r60abd1',
 
-      // 姿态数据
-      POSTURE: '/ws/posture',
+      // TI6843 呼吸心跳数据 (实时)
+      TI6843_VITAL: '/ws/ti6843-vital',
 
-      // 心电图数据
-      ECG: '/ws/ecg',
+      // TI6843 人体位姿数据 (实时)
+      TI6843_POSTURE: '/ws/ti6843-posture',
 
-      // R77ABH1设备数据
-      R77ABH1: '/ws/r77abh1',
+      // 跌倒警报 (实时)
+      FALL_ALERT: '/ws/fall-alert',
 
-      // R60ABD1雷达数据（根据最新文档）
-      R60ABD1: '/ws/r60abd1'
+      // 生命体征异常警报 (实时)
+      VITALS_ALERT: '/ws/vitals-alert',
+
+      // 设备状态通知
+      DEVICE_STATUS: '/ws/device-status'
     }
   },
 

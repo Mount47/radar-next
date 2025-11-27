@@ -306,7 +306,7 @@ export default {
   },
   data() {
     return {
-      dataManager: dataManager,
+      // dataManager: dataManager, // 移除：避免 Vue 代理 DataManager 单例
       breathStatus: 'normal',
       breathRate: 0,
       breathWaveform: [],
@@ -413,8 +413,8 @@ export default {
             if (oldDeviceType === 'TI6843' && this.ti6843WebSocket) {
               this.ti6843WebSocket.close()
               this.ti6843WebSocket = null
-            } else if (this.dataManager) {
-              this.dataManager.unsubscribeFromDevice(oldId, this.handleData)
+            } else {
+              dataManager.unsubscribeFromDevice(oldId, this.handleData)
             }
           }
 
@@ -422,10 +422,8 @@ export default {
           this.updateDevicePortConfig(newId)
 
           // 建立新设备连接
-          if (this.dataManager) {
-            this.dataManager.subscribeToDevice(newId, this.handleData)
-            this.restartDataManager()
-          }
+          dataManager.subscribeToDevice(newId, this.handleData)
+          this.restartDataManager()
         }
       },
       immediate: true
@@ -497,21 +495,29 @@ export default {
 
     // 统一使用 DataManager 连接
     console.log(`📡 ${detectedDeviceType}设备 - 使用DataManager连接`)
-    this.dataManager.subscribeToDevice(deviceId, this.handleData)
-    this.dataManager.on('connectionChange', this.handleConnectionChange)
+    
+    // 直接使用 import 的 dataManager 实例，避免 Vue 代理导致的问题
+    // 监听全局数据更新，以处理设备ID不完全匹配的情况
+    dataManager.on('dataUpdate', this.handleData)
+    dataManager.subscribeToDevice(deviceId, this.handleData)
+    dataManager.on('connectionChange', this.handleConnectionChange)
+    
     this.restartDataManager()
   },
   beforeDestroy() {
     console.log('Vital页面 - 销毁')
 
     // 停止DataManager
-    this.dataManager.stop()
+    dataManager.stop()
+    
     // 移除设备特定的订阅
     if (this.currentDevice && this.currentDevice.id) {
-      this.dataManager.unsubscribeFromDevice(this.currentDevice.id, this.handleData)
+      dataManager.unsubscribeFromDevice(this.currentDevice.id, this.handleData)
     }
+    
     // 移除全局事件监听器
-    this.dataManager.off('connectionChange', this.handleConnectionChange)
+    dataManager.off('dataUpdate', this.handleData)
+    dataManager.off('connectionChange', this.handleConnectionChange)
 
     // 停止监测状态检测
     this.stopMonitoringStatusCheck()
@@ -721,9 +727,9 @@ export default {
     // ==================== R60ABD1数据处理（原有方法）====================
     handleData(data) {
       try {
-        // 打印接收到的数据进行调试
-        // console.log('Vital页面 - 接收到数据:', data)
-        
+        // 调试日志：确认 handleData 被调用
+        // console.log('Vital页面 - handleData被调用', data?.deviceId)
+
         if (!data || typeof data !== 'object') {
           console.warn('Vital页面 - 数据格式无效:', data)
           return
@@ -733,9 +739,39 @@ export default {
         const dataDeviceId = data.deviceId
         const currentDeviceId = this.currentDevice.id
         
-        if (dataDeviceId && currentDeviceId && dataDeviceId !== currentDeviceId) {
+        // 宽松匹配设备ID：完全匹配，或者前缀匹配（处理 R60ABD1 vs R60ABD1_COM3 的情况）
+        const isMatch = dataDeviceId === currentDeviceId || 
+                        (dataDeviceId && currentDeviceId && dataDeviceId.startsWith(currentDeviceId)) ||
+                        (currentDeviceId === 'R60ABD1' && dataDeviceId && dataDeviceId.startsWith('R60ABD1'));
+
+        if (dataDeviceId && currentDeviceId && !isMatch) {
           // console.log(`🚫 Vital页面 - 跳过非当前设备数据: 数据来自 ${dataDeviceId}, 当前设备 ${currentDeviceId}`)
           return
+        }
+
+        // 如果检测到更具体的设备ID，更新当前设备ID并重新订阅
+        if (isMatch && dataDeviceId && dataDeviceId !== currentDeviceId) {
+          console.log(`🔄 更新设备ID并重新订阅: ${currentDeviceId} -> ${dataDeviceId}`)
+          
+          // 1. 取消旧设备的订阅
+          dataManager.unsubscribeFromDevice(currentDeviceId, this.handleData)
+          
+          // 2. 更新设备ID
+          this.currentDevice.id = dataDeviceId
+          this.updateDevicePortConfig(dataDeviceId)
+          
+          // 3. 订阅新设备
+          dataManager.subscribeToDevice(dataDeviceId, this.handleData)
+        }
+
+        // 更新人员信息（如果数据中包含）
+        if (data.personId && (!this.currentPerson.id || this.currentPerson.id !== data.personId)) {
+          // console.log(`👤 更新人员ID: ${this.currentPerson.id} -> ${data.personId}`)
+          this.currentPerson.id = data.personId
+          // 如果没有名字，暂时用ID代替
+          if (!this.currentPerson.name || this.currentPerson.name === '未知用户') {
+             this.currentPerson.name = data.personId
+          }
         }
         
         // 记录数据接收时间
@@ -935,14 +971,12 @@ export default {
     disconnectWS() {
       try {
         // 停止数据监听
-        if (this.dataManager) {
-          // 移除事件监听
-          this.dataManager.off('dataUpdate', this.handleData)
-          this.dataManager.off('connectionChange', this.handleConnectionChange)
+        // 移除事件监听
+        dataManager.off('dataUpdate', this.handleData)
+        dataManager.off('connectionChange', this.handleConnectionChange)
 
-          // 停止数据管理器
-          this.dataManager.stop()
-        }
+        // 停止数据管理器
+        dataManager.stop()
 
         // 更新连接状态
         this.connectionStatus = 'disconnected'

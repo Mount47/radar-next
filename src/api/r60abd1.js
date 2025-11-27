@@ -250,20 +250,29 @@ export function deletePersonDeviceMapping(mappingId) {
   })
 }
 
+import { createR60ABD1WebSocket as createWS } from '@/utils/websocket'
+
+// ...existing code...
+
 // ==================== WebSocket工具函数 ====================
 
 /**
  * 获取R60ABD1 WebSocket连接URL
  */
 export function getR60ABD1WebSocketUrl() {
-  return API_CONFIG.WS.BASE_URL + API_CONFIG.R60ABD1.WS_ENDPOINT
+  return API_CONFIG.WS.BASE_URL + API_CONFIG.WS.ENDPOINTS.R60ABD1
 }
 
 /**
  * 创建R60ABD1 WebSocket连接
  */
 export function createR60ABD1WebSocket() {
-  const wsUrl = getR60ABD1WebSocketUrl()
-  console.log('🔗 创建R60ABD1 WebSocket连接:', wsUrl)
-  return new WebSocket(wsUrl)
+  // 使用统一的 websocket 工具
+  const client = createWS()
+  // 为了保持兼容性，如果调用者期望返回原生 WebSocket，这里可能需要调整
+  // 但 WebSocketClient 封装得更好。如果必须返回原生 ws，可以 client.ws
+  // 鉴于 WebSocketClient 的设计，我们返回 client 实例，或者如果旧代码依赖原生 ws，则返回 client.ws
+  // 查看原代码，它返回 new WebSocket(url)。
+  // 为了最小化破坏，我们这里返回原生 WebSocket 对象，但建议迁移到 WebSocketClient
+  return client.ws || client // 这是一个折衷，因为 WebSocketClient 在构造函数中就连接了
 }
