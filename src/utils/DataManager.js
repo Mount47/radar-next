@@ -42,10 +42,9 @@ class SimpleEventEmitter {
 class DataManager extends SimpleEventEmitter {
   constructor() {
     super()
-    this.ws = null // 原生WebSocket连接
+    this.connections = new Map() // 不同设备类型的WebSocket连接
     this.connected = false
     this.deviceId = null
-    this.deviceType = null
     this.retryCount = 0
     this.maxRetries = 10
     this.retryDelay = 5000
@@ -53,8 +52,8 @@ class DataManager extends SimpleEventEmitter {
     this.bufferTimeout = null // 缓冲区定时器
     this.lastEmitTime = 0 // 上次发送数据的时间
     this.dataEmitInterval = 500 // 数据发送间隔(毫秒)
-    this.heartbeatInterval = null // 心跳定时器
     this.heartbeatTimeout = 30000 // 30秒心跳间隔
+    this.defaultConnectionKeys = ['R60ABD1', 'TI6843_VITAL'] // 默认同时监听R60和TI6843呼吸心跳
     this.deviceSubscriptions = new Map() // 设备订阅管理 {deviceId: Set of callback functions}
   }
 
@@ -84,138 +83,224 @@ class DataManager extends SimpleEventEmitter {
   }
 
   start(deviceId) {
-    console.log('启动数据管理器...')
-    this.deviceId = deviceId || 'R60ABD1' // 默认设备ID为R60ABD1
-    this.deviceType = getDeviceType(this.deviceId)
+    console.log('==================================================')
+    console.log('🚀 启动DataManager...')
+    if (!deviceId) {
+      console.warn('⚠️ 未指定设备ID，将采用默认连接策略（R60ABD1 + TI6843_VITAL）')
+    } else {
+      this.deviceId = deviceId
+      console.log('📋 传入设备ID:', this.deviceId)
+      console.log('✅ 识别设备类型:', getDeviceType(this.deviceId))
+    }
+    console.log('==================================================')
+    
     this.initWebSocket()
   }
 
   initWebSocket() {
-    console.log(`🔗 正在建立 ${this.deviceType} WebSocket连接...`)
-    
-    try {
-      // 确保 API_CONFIG 和 WS 配置存在
-      if (!API_CONFIG || !API_CONFIG.WS || !API_CONFIG.WS.ENDPOINTS) {
-        console.error('❌ API配置未正确加载，使用默认配置')
+    const requiredConnections = this.getRequiredConnectionKeys()
+    console.log('==================================================')
+    console.log('?? ????WebSocket??:')
+    console.log('   ->', Array.from(requiredConnections).join(', ') || '?')
+    console.log('==================================================')
+    requiredConnections.forEach(key => this.connectToEndpoint(key))
+  }
+
+  getRequiredConnectionKeys() {
+    const keys = new Set(this.defaultConnectionKeys)
+    if (this.deviceId) {
+      const type = getDeviceType(this.deviceId)
+      if (type === 'TI6843' && this.deviceId.toUpperCase().includes('POSTURE')) {
+        keys.add('TI6843_POSTURE')
       }
+    }
+    return keys
+  }
 
-      const endpoints = API_CONFIG?.WS?.ENDPOINTS || {
-        R60ABD1: '/ws/r60abd1',
-        TI6843_VITAL: '/ws/ti6843-vital',
-        TI6843_POSTURE: '/ws/ti6843-posture'
-      }
-
-      // 根据设备类型选择WebSocket地址
-      let wsEndpoint = endpoints.R60ABD1
-      
-      if (this.deviceType === 'TI6843') {
-        // 检查是否为姿态监测设备
-        if (this.deviceId && this.deviceId.toUpperCase().includes('POSTURE')) {
-           wsEndpoint = endpoints.TI6843_POSTURE
-        } else {
-           wsEndpoint = endpoints.TI6843_VITAL
-        }
-      } else if (this.deviceType === 'R60ABD1') {
-        wsEndpoint = endpoints.R60ABD1
-      }
-
-      if (!wsEndpoint) {
-        console.error(`❌ 无法为设备类型 ${this.deviceType} 找到对应的 WebSocket 端点，使用默认值`)
-        wsEndpoint = '/ws/r60abd1'
-      }
-
-      const baseUrl = API_CONFIG?.WS?.BASE_URL || 'ws://localhost:8080'
-      const wsUrl = baseUrl + wsEndpoint
-      console.log(`📡 准备连接到 WebSocket: ${wsUrl} (设备类型: ${this.deviceType}, ID: ${this.deviceId})`)
-
-      // 创建原生WebSocket连接
-      this.ws = new WebSocket(wsUrl)
-
-      // 连接打开事件
-      this.ws.onopen = (event) => {
-        console.log(`✅ ${this.deviceType} WebSocket连接已建立`, event)
-        this.connected = true
-        this.retryCount = 0
-        
-        // 启动心跳
-        this.startHeartbeat()
-        
-        // 发送连接成功事件
-        this.emit('connectionChange', true)
-        
-        console.log(`🎯 等待接收 ${this.deviceType} 实时数据...`)
-      }
-
-      // 接收消息事件
-      this.ws.onmessage = (event) => {
-        try {
-          // console.log('📨 收到WebSocket消息:', event.data)
-          const message = JSON.parse(event.data)
-          
-          // 处理不同类型的消息
-          if (message.type === 'connection_established') {
-             console.log('🟢 连接建立确认:', message.message)
-          } else if (message.type === 'r60abd1_realtime' || message.type === 'ti6843_vital_realtime') {
-             console.log(`📊 接收到 ${message.type} 实时数据, 设备ID: ${message.data?.deviceId}`)
-             if (message.data) {
-               this.handleData(message.data)
-             }
-          } else {
-             console.log('📨 接收到其他类型消息:', message.type || '未知类型')
-             // 尝试直接处理数据（兼容旧格式）
-             if (message.deviceId || message.heartRate) {
-                this.handleData(message)
-             }
-          }
-        } catch (error) {
-          console.error('❌ 解析WebSocket消息失败:', error, '原始消息:', event.data)
-        }
-      }
-
-      // 错误处理
-      this.ws.onerror = (error) => {
-        console.error(`❌ ${this.deviceType} WebSocket错误:`, error)
-        this.connected = false
-        this.emit('connectionChange', false)
-      }
-
-      // 连接关闭事件
-      this.ws.onclose = (event) => {
-        console.log(`🔌 ${this.deviceType} WebSocket连接已关闭`, event.code, event.reason)
-        this.connected = false
-        this.stopHeartbeat()
-        this.emit('connectionChange', false)
-        
-        // 如果不是主动关闭，则尝试重连
-        if (!event.wasClean && this.retryCount < this.maxRetries) {
-          console.log('🔄 准备重新连接...')
-          setTimeout(() => this.reconnect(), this.retryDelay)
-        }
-      }
-      
-    } catch (error) {
-      console.error('❌ 创建WebSocket连接失败:', error)
-      this.reconnect()
+  getEndpointConfig(connectionKey) {
+    const endpoints = API_CONFIG?.WS?.ENDPOINTS || {
+      R60ABD1: '/ws/r60abd1',
+      TI6843_VITAL: '/ws/ti6843-vital',
+      TI6843_POSTURE: '/ws/ti6843-posture'
+    }
+    const labels = {
+      R60ABD1: 'R60ABD1 ????',
+      TI6843_VITAL: 'TI6843 ????',
+      TI6843_POSTURE: 'TI6843 ??'
+    }
+    const endpoint = endpoints[connectionKey]
+    if (!endpoint) return null
+    return {
+      endpoint,
+      label: labels[connectionKey] || connectionKey
     }
   }
 
-  // 启动心跳
-  startHeartbeat() {
-    this.stopHeartbeat() // 确保没有重复的心跳
-    
-    this.heartbeatInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        console.log('💓 发送WebSocket心跳')
-        this.ws.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }))
+  connectToEndpoint(connectionKey) {
+    const config = this.getEndpointConfig(connectionKey)
+    if (!config) {
+      console.warn(`?? ??? ${connectionKey} ?WebSocket????`)
+      return
+    }
+
+    const existing = this.connections.get(connectionKey)
+    if (existing?.ws && (existing.ws.readyState === WebSocket.OPEN || existing.ws.readyState === WebSocket.CONNECTING)) {
+      console.log(`?? [${connectionKey}] ?????????????`)
+      return
+    }
+
+    const baseUrl = API_CONFIG?.WS?.BASE_URL || 'ws://localhost:8080'
+    const wsUrl = baseUrl + config.endpoint
+    console.log(`?? [${connectionKey}] ??WebSocket?? -> ${wsUrl}`)
+
+    const connectionState = existing || {}
+    connectionState.key = connectionKey
+    connectionState.label = config.label
+    connectionState.endpoint = config.endpoint
+    connectionState.retryCount = connectionState.retryCount || 0
+    connectionState.manualClose = false
+    connectionState.connected = false
+    this.clearReconnectTimer(connectionKey)
+
+    const ws = new WebSocket(wsUrl)
+    connectionState.ws = ws
+    this.connections.set(connectionKey, connectionState)
+
+    ws.onopen = (event) => {
+      console.log(`? [${connectionKey}] WebSocket?????`, event)
+      connectionState.connected = true
+      connectionState.retryCount = 0
+      this.updateRetryCount()
+      this.startHeartbeatForConnection(connectionKey)
+      this.updateGlobalConnectionStatus()
+      console.log(`?? [${connectionKey}] ????????...`)
+    }
+
+    ws.onmessage = (event) => {
+      this.handleIncomingMessage(connectionKey, event.data)
+    }
+
+    ws.onerror = (error) => {
+      console.error(`? [${connectionKey}] WebSocket??:`, error)
+      connectionState.connected = false
+      this.updateGlobalConnectionStatus()
+    }
+
+    ws.onclose = (event) => {
+      console.log(`?? [${connectionKey}] WebSocket?????`, event.code, event.reason)
+      connectionState.connected = false
+      this.stopHeartbeatForConnection(connectionKey)
+      this.updateGlobalConnectionStatus()
+
+      if (!connectionState.manualClose) {
+        this.scheduleReconnect(connectionKey)
+      }
+    }
+  }
+
+  handleIncomingMessage(connectionKey, rawData) {
+    try {
+      const message = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
+      if (message.type === 'connection_established') {
+        console.log(`?? [${connectionKey}] ??????:`, message.message)
+        return
+      }
+
+      if (message.type === 'r60abd1_realtime' || message.type === 'ti6843_vital_realtime') {
+        console.log('==================================================')
+        console.log(`?? [${connectionKey}] ??? ${message.type} ????`)
+        console.log(`   ??ID: ${message.deviceId || message.data?.deviceId || '??'}`)
+        console.log(`   ??ID: ${message.personId || message.data?.personId || '???'}`)
+        console.log(`   ??: ${message.data?.heartRate || 'N/A'}`)
+        console.log(`   ??: ${message.data?.breathRate || message.data?.respiration || 'N/A'}`)
+        console.log('==================================================')
+        if (message.data) {
+          const dataWithTopLevelFields = {
+            ...message.data,
+            deviceId: message.data.deviceId || message.deviceId,
+            personId: message.data.personId || message.personId,
+            timestamp: message.data.timestamp || message.timestamp
+          }
+          this.handleData(dataWithTopLevelFields)
+        } else {
+          console.warn('?? ????? data ??')
+        }
+        return
+      }
+
+      if (message.deviceId || message.heartRate) {
+        console.log(`?? [${connectionKey}] ??????????`)
+        this.handleData(message)
+        return
+      }
+
+      console.log(`?? [${connectionKey}] ??????????:`, message.type || '????', message)
+    } catch (error) {
+      console.error(`? [${connectionKey}] ??????:`, error)
+      console.error('????:', rawData)
+    }
+  }
+
+  startHeartbeatForConnection(connectionKey) {
+    this.stopHeartbeatForConnection(connectionKey)
+    const connection = this.connections.get(connectionKey)
+    if (!connection) return
+
+    connection.heartbeatInterval = setInterval(() => {
+      if (connection.ws && connection.ws.readyState === WebSocket.OPEN) {
+        connection.ws.send(JSON.stringify({ type: 'ping', source: connectionKey, timestamp: Date.now() }))
       }
     }, this.heartbeatTimeout)
   }
 
-  // 停止心跳
-  stopHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval)
-      this.heartbeatInterval = null
+  stopHeartbeatForConnection(connectionKey) {
+    const connection = this.connections.get(connectionKey)
+    if (connection?.heartbeatInterval) {
+      clearInterval(connection.heartbeatInterval)
+      connection.heartbeatInterval = null
+    }
+  }
+
+  scheduleReconnect(connectionKey) {
+    const connection = this.connections.get(connectionKey)
+    if (!connection || connection.manualClose) {
+      return
+    }
+
+    if (connection.retryCount >= this.maxRetries) {
+      console.error(`? [${connectionKey}] ????????(${this.maxRetries})`)
+      return
+    }
+
+    connection.retryCount += 1
+    this.updateRetryCount()
+    const delay = Math.min(this.retryDelay * Math.pow(2, connection.retryCount - 1), 30000)
+    console.log(`? [${connectionKey}] ?? ${delay}ms ????? (${connection.retryCount}/${this.maxRetries})`)
+
+    connection.reconnectTimer = setTimeout(() => {
+      connection.reconnectTimer = null
+      this.connectToEndpoint(connectionKey)
+    }, delay)
+  }
+
+  clearReconnectTimer(connectionKey) {
+    const connection = this.connections.get(connectionKey)
+    if (connection?.reconnectTimer) {
+      clearTimeout(connection.reconnectTimer)
+      connection.reconnectTimer = null
+    }
+  }
+
+  updateRetryCount() {
+    const counts = Array.from(this.connections.values()).map(conn => conn.retryCount || 0)
+    this.retryCount = counts.length > 0 ? Math.max(...counts) : 0
+  }
+
+  updateGlobalConnectionStatus() {
+    const anyConnected = Array.from(this.connections.values()).some(conn => conn.connected)
+    if (anyConnected !== this.connected) {
+      this.connected = anyConnected
+      this.emit('connectionChange', this.connected)
     }
   }
 
@@ -291,7 +376,14 @@ class DataManager extends SimpleEventEmitter {
       }
 
       // 添加调试日志
-      console.log('DataManager - 发送处理后的数据:', processedData)
+      console.log('========================================')
+      console.log('DataManager - 发送处理后的数据')
+      console.log('设备ID:', processedData.deviceId)
+      console.log('心率:', processedData.heartRate)
+      console.log('呼吸(respiration):', processedData.respiration)
+      console.log('呼吸(breathRate):', processedData.breathRate)
+      console.log('完整数据:', processedData)
+      console.log('========================================')
       
       // 获取数据对应的设备ID
       const dataDeviceId = processedData.deviceId
@@ -338,23 +430,49 @@ class DataManager extends SimpleEventEmitter {
               isMatch = true
             }
           }
+          // 4. 特殊处理：TI6843_VITAL 类型的额外匹配规则
+          //    订阅 TI6843_VITAL_001 应该匹配 TI6843_VITAL
+          else if (subscribedDeviceId.toUpperCase().includes('TI6843_VITAL') && 
+                   dataDeviceId.toUpperCase().includes('TI6843_VITAL')) {
+            isMatch = true
+          }
+          // 5. 特殊处理：R60ABD1 类型的额外匹配规则
+          else if (subscribedDeviceId.toUpperCase().includes('R60ABD1') && 
+                   dataDeviceId.toUpperCase().includes('R60ABD1')) {
+            isMatch = true
+          }
           
           if (isMatch && subscribers.size > 0) {
             foundSubscribers = true
-            console.log(`📡 向设备 ${subscribedDeviceId} 的 ${subscribers.size} 个订阅者发送数据 (数据来自: ${dataDeviceId})`)
+            console.log(`📡 ✅ 匹配成功！向设备 ${subscribedDeviceId} 的 ${subscribers.size} 个订阅者发送数据`)
+            console.log(`   数据来源: ${dataDeviceId}`)
+            console.log(`   心率: ${processedData.heartRate}, 呼吸: ${processedData.respiration}`)
             subscribers.forEach(callback => {
               try {
                 callback(processedData)
               } catch (error) {
-                console.error(`向设备 ${subscribedDeviceId} 的订阅者发送数据失败:`, error)
+                console.error(`❌ 向设备 ${subscribedDeviceId} 的订阅者发送数据失败:`, error)
               }
             })
+          } else if (isMatch && subscribers.size === 0) {
+            console.warn(`⚠️ 设备 ${subscribedDeviceId} 匹配但没有订阅者`)
           }
         }
         
         if (!foundSubscribers) {
-          console.warn(`📡 设备 ${dataDeviceId} 没有匹配的订阅者，跳过数据分发. 当前订阅: [${Array.from(this.deviceSubscriptions.keys()).join(', ')}]`)
+          console.error(`❌ 设备 ${dataDeviceId} 没有匹配的订阅者！`)
+          console.error(`   数据设备ID: ${dataDeviceId}`)
+          console.error(`   当前订阅列表: [${Array.from(this.deviceSubscriptions.keys()).join(', ')}]`)
+          console.error(`   `)
+          console.error(`   💡 可能的原因：`)
+          console.error(`   1. URL参数中的deviceId与后端发送的deviceId不匹配`)
+          console.error(`   2. 订阅使用了人员ID而不是设备ID`)
+          console.error(`   3. 设备ID格式不一致（如 RD002 vs R60ABD1_COM2）`)
+          console.error(`   `)
+          console.error(`   💡 建议：页面会自动更新订阅，请等待或刷新页面`)
         }
+      } else {
+        console.warn(`⚠️ 数据中没有设备ID，无法分发到订阅者`)
       }
       
       // 保持向后兼容：继续发送全局事件（但组件应该迁移到设备特定订阅）
@@ -368,56 +486,44 @@ class DataManager extends SimpleEventEmitter {
     }
   }
 
-  reconnect() {
-    if (this.retryCount >= this.maxRetries) {
-      console.error('重试次数超过最大限制')
-      return
-    }
-
-    console.log(`尝试重新连接... (${++this.retryCount}/${this.maxRetries})`)
-    this.stop()
-
-    // 计算延迟时间（指数退避策略）
-    const delay = Math.min(this.retryDelay * Math.pow(2, this.retryCount - 1), 30000)
-    console.log(`等待 ${delay}ms 后重试...`)
-
-    setTimeout(() => {
-      this.initWebSocket()
-    }, delay)
-  }
-
   stop() {
-    console.log('🛑 停止数据管理器...')
+    console.log('?? ???????...')
 
-    // 停止心跳
-    this.stopHeartbeat()
-
-    // 清除可能存在的缓冲区定时器
     if (this.bufferTimeout) {
       clearTimeout(this.bufferTimeout)
       this.bufferTimeout = null
     }
 
-    // 清空数据缓冲区
     this.dataBuffer = []
 
-    // 关闭WebSocket连接
-    if (this.ws) {
-      if (this.ws.readyState === WebSocket.OPEN) {
-        console.log('🔌 主动关闭WebSocket连接')
-        this.ws.close(1000, '正常关闭')
+    for (const [connectionKey, connection] of this.connections.entries()) {
+      connection.manualClose = true
+      this.clearReconnectTimer(connectionKey)
+      this.stopHeartbeatForConnection(connectionKey)
+
+      if (connection.ws) {
+        console.log(`?? ???? [${connectionKey}] WebSocket??`)
+        try {
+          connection.ws.close(1000, '????')
+        } catch (error) {
+          console.error(`? ?? [${connectionKey}] ????:`, error)
+        }
       }
-      this.ws = null
     }
-    
+
+    this.connections.clear()
     this.connected = false
-    console.log('✅ 数据管理器已停止')
+    this.retryCount = 0
+    this.emit('connectionChange', false)
+    console.log('? ????????')
   }
 
-  // 发送命令到服务器（原生WebSocket版本）
-  sendCommand(command) {
-    if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error('❌ WebSocket未连接，无法发送命令')
+
+  // ???????????WebSocket???
+  sendCommand(command, targetConnectionKey = 'R60ABD1') {
+    const connection = this.connections.get(targetConnectionKey)
+    if (!connection || !connection.ws || connection.ws.readyState !== WebSocket.OPEN) {
+      console.error(`? ${targetConnectionKey} WebSocket??????????`)
       return false
     }
 
@@ -425,18 +531,19 @@ class DataManager extends SimpleEventEmitter {
       const message = {
         type: 'command',
         deviceId: this.deviceId,
-        command: command,
+        command,
         timestamp: Date.now()
       }
-      
-      console.log(`📤 发送命令到R60ABD1:`, message)
-      this.ws.send(JSON.stringify(message))
+
+      console.log(`?? ????? ${targetConnectionKey}:`, message)
+      connection.ws.send(JSON.stringify(message))
       return true
     } catch (error) {
-      console.error('❌ 发送命令失败:', error)
+      console.error(`? ? ${targetConnectionKey} ??????:`, error)
       return false
     }
   }
+
 }
 
 // 创建单例实例

@@ -19,9 +19,9 @@
               >
                 <el-option
                   v-for="person in personList"
-                  :key="person.id"
-                  :label="person.name"
-                  :value="person.id"
+                  :key="person.personId"
+                  :label="person.personName"
+                  :value="person.personId"
                 />
               </el-select>
             </div>
@@ -77,7 +77,7 @@
     </div>
 
     <!-- 统计数据区域 -->
-    <div class="statistics-section" v-if="statistics && Object.keys(statistics).length > 0">
+    <div class="statistics-section">
       <h3 class="section-title">历史统计</h3>
       
       <div class="stat-cards">
@@ -107,7 +107,9 @@
         
         <div class="stat-card walking-card">
           <div class="stat-icon walking-icon">
-            <el-icon><Walk /></el-icon>
+            <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+              <path d="M512 128c-35.3 0-64 28.7-64 64s28.7 64 64 64 64-28.7 64-64-28.7-64-64-64zM400 320c-17.7 0-32 14.3-32 32v192l-48 96v192c0 17.7 14.3 32 32 32s32-14.3 32-32V672l32-64v224c0 17.7 14.3 32 32 32s32-14.3 32-32V608l64 128v96c0 17.7 14.3 32 32 32s32-14.3 32-32V736l-64-128V352c0-17.7-14.3-32-32-32H400z" fill="currentColor"/>
+            </svg>
           </div>
           <div class="stat-content">
             <div class="stat-label">行走时间</div>
@@ -130,7 +132,7 @@
     </div>
 
     <!-- 图表区域 -->
-    <div class="chart-section" v-if="statistics && Object.keys(statistics).length > 0">
+    <div class="chart-section">
       <div class="chart-card">
         <div class="chart-header">
           <h3 class="section-title">位姿分布</h3>
@@ -233,19 +235,12 @@
         <el-button type="primary" @click="handleReset">重新搜索</el-button>
       </el-empty>
     </div>
-
-    <!-- 初始状态 -->
-    <div class="initial-state" v-if="!hasSearched">
-      <el-empty description="请选择搜索条件并点击搜索按钮">
-        <el-icon class="empty-icon"><Search /></el-icon>
-      </el-empty>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
-import { Search, RefreshLeft, User, Walk, Warning } from '@element-plus/icons-vue'
+import { Search, RefreshLeft, User, Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
 import { getPersons } from '@/api/person'
@@ -262,8 +257,18 @@ const searchForm = reactive({
 // 人员列表
 const personList = ref([])
 
-// 统计数据
-const statistics = ref({})
+// 统计数据 - 初始化为默认值
+const statistics = ref({
+  sittingPercentage: 0,
+  sittingDuration: 0,
+  standingPercentage: 0,
+  standingDuration: 0,
+  walkingPercentage: 0,
+  walkingDuration: 0,
+  fallPercentage: 0,
+  fallCount: 0,
+  totalDuration: 0
+})
 
 // 表格数据
 const tableData = ref([])
@@ -334,27 +339,25 @@ const shortcuts = [
 
 // 图例数据
 const legendData = computed(() => {
-  if (!statistics.value || Object.keys(statistics.value).length === 0) return []
-  
   return [
     {
       name: '坐姿',
-      value: formatPercentage(statistics.value.sittingPercentage),
+      value: formatPercentage(statistics.value.sittingPercentage || 0),
       color: '#845EF7'
     },
     {
       name: '站立',
-      value: formatPercentage(statistics.value.standingPercentage),
+      value: formatPercentage(statistics.value.standingPercentage || 0),
       color: '#5E9AFF'
     },
     {
       name: '行走',
-      value: formatPercentage(statistics.value.walkingPercentage),
+      value: formatPercentage(statistics.value.walkingPercentage || 0),
       color: '#67C23A'
     },
     {
       name: '跌倒',
-      value: formatPercentage(statistics.value.fallPercentage),
+      value: formatPercentage(statistics.value.fallPercentage || 0),
       color: '#F56C6C'
     }
   ]
@@ -368,6 +371,10 @@ onMounted(async () => {
   const start = new Date()
   start.setTime(start.getTime() - 3600 * 1000)
   searchForm.timeRange = [start, end]
+  
+  // 初始化图表，显示默认的0数据
+  await nextTick()
+  renderChart()
 })
 
 onBeforeUnmount(() => {
@@ -448,13 +455,21 @@ const handleSearch = async () => {
     
     // 处理统计数据
     const statsPayload = (statsRes && statsRes.data) ? statsRes.data : statsRes
-    statistics.value = statsPayload || {}
-    
-    // 渲染图表
-    await nextTick()
-    if (statistics.value && Object.keys(statistics.value).length > 0) {
-      renderChart()
+    statistics.value = statsPayload || {
+      sittingPercentage: 0,
+      sittingDuration: 0,
+      standingPercentage: 0,
+      standingDuration: 0,
+      walkingPercentage: 0,
+      walkingDuration: 0,
+      fallPercentage: 0,
+      fallCount: 0,
+      totalDuration: 0
     }
+    
+    // 渲染图表（始终渲染，即使数据为0）
+    await nextTick()
+    renderChart()
     
     if (tableData.value.length === 0) {
       ElMessage.info('未查询到数据')
@@ -463,7 +478,20 @@ const handleSearch = async () => {
     console.error('查询失败:', error)
     ElMessage.error('查询失败: ' + (error.message || '未知错误'))
     tableData.value = []
-    statistics.value = {}
+    statistics.value = {
+      sittingPercentage: 0,
+      sittingDuration: 0,
+      standingPercentage: 0,
+      standingDuration: 0,
+      walkingPercentage: 0,
+      walkingDuration: 0,
+      fallPercentage: 0,
+      fallCount: 0,
+      totalDuration: 0
+    }
+    // 即使失败也渲染图表显示0值
+    await nextTick()
+    renderChart()
   } finally {
     isLoading.value = false
   }
@@ -480,15 +508,25 @@ const handleReset = () => {
   searchForm.timeRange = [start, end]
   
   tableData.value = []
-  statistics.value = {}
+  statistics.value = {
+    sittingPercentage: 0,
+    sittingDuration: 0,
+    standingPercentage: 0,
+    standingDuration: 0,
+    walkingPercentage: 0,
+    walkingDuration: 0,
+    fallPercentage: 0,
+    fallCount: 0,
+    totalDuration: 0
+  }
   pagination.currentPage = 1
   pagination.total = 0
   hasSearched.value = false
   
-  if (chartInstance) {
-    chartInstance.dispose()
-    chartInstance = null
-  }
+  // 重置后重新渲染图表显示0值
+  nextTick(() => {
+    renderChart()
+  })
 }
 
 // 分页处理

@@ -178,33 +178,47 @@
           </div>
           
           <div class="user-profile">
-            <el-avatar :size="80" class="user-avatar">
+            <el-avatar :size="80" class="user-avatar" :style="{ opacity: currentPerson.id ? 1 : 0.5 }">
               <el-icon><User /></el-icon>
             </el-avatar>
             <div class="user-info">
-              <h3 class="user-name-title">{{ currentPerson.name || '未知用户' }}</h3>
-              <p class="user-meta">工号: {{ currentPerson.id || '-' }}</p>
+              <h3 class="user-name-title">
+                {{ currentPerson.id ? (currentPerson.name || currentPerson.id) : '未绑定人员' }}
+              </h3>
+              <p class="user-meta">
+                {{ currentPerson.id ? `工号: ${currentPerson.id}` : '设备当前未绑定任何人员' }}
+              </p>
             </div>
           </div>
 
           <div class="info-list">
             <div class="info-item">
+              <span class="info-label">绑定状态</span>
+              <el-tag :type="currentPerson.id ? 'success' : 'info'" size="small">
+                {{ currentPerson.id ? '已绑定' : '未绑定' }}
+              </el-tag>
+            </div>
+            <div class="info-item" v-if="currentPerson.id">
               <span class="info-label">用户ID</span>
-              <span class="info-value">{{ currentPerson.id || '-' }}</span>
+              <span class="info-value">{{ currentPerson.id }}</span>
             </div>
-            <div class="info-item">
+            <div class="info-item" v-if="currentPerson.id">
               <span class="info-label">姓名</span>
-              <span class="info-value">{{ currentPerson.name || '-' }}</span>
+              <span class="info-value">{{ currentPerson.name || currentPerson.id }}</span>
             </div>
-            <div class="info-item">
+            <div class="info-item" v-if="!currentPerson.id">
+              <span class="info-label" style="color: #999;">未绑定人员</span>
+              <span class="info-value" style="color: #999;">该设备当前没有绑定人员信息</span>
+            </div>
+            <div class="info-item" v-if="currentPerson.id && currentPerson.gender">
               <span class="info-label">性别</span>
-              <span class="info-value">{{ currentPerson.gender || '-' }}</span>
+              <span class="info-value">{{ currentPerson.gender }}</span>
             </div>
-            <div class="info-item">
+            <div class="info-item" v-if="currentPerson.id && currentPerson.identity">
               <span class="info-label">身份</span>
-              <span class="info-value">{{ currentPerson.identity || '-' }}</span>
+              <span class="info-value">{{ currentPerson.identity }}</span>
             </div>
-            <div class="info-item">
+            <div class="info-item" v-if="currentPerson.id && currentPerson.createdAt">
               <span class="info-label">创建时间</span>
               <span class="info-value">{{ formatDate(currentPerson.createdAt) }}</span>
             </div>
@@ -431,8 +445,9 @@ export default {
   },
   mounted() {
     // 从URL参数或Vuex状态中获取设备和人员信息
-    const deviceId = this.$route.query.deviceId || this.currentDeviceId || 'R60ABD1'
-    const deviceName = this.$route.query.deviceName || '雷达设备A'
+    // 🔧 修复：移除默认值'R60ABD1'，让DataManager根据实际设备类型连接正确的WebSocket
+    const deviceId = this.$route.query.deviceId || this.currentDeviceId
+    const deviceName = this.$route.query.deviceName || '呼吸心跳设备'
     const deviceLocation = this.$route.query.deviceLocation || '房间1'
 
     // 获取人员信息
@@ -447,25 +462,45 @@ export default {
     })
 
     // 添加日志
-    console.log('Vital页面 - 初始化')
-    console.log('Vital页面 - 设备ID:', deviceId)
-    console.log('Vital页面 - 设备名称:', deviceName)
-    console.log('Vital页面 - 设备位置:', deviceLocation)
-    console.log('Vital页面 - 人员ID:', personId)
-    console.log('Vital页面 - 人员姓名:', personName)
-    console.log('Vital页面 - 映射名称:', mappingName)
+    console.log('==================================================')
+    console.log('🚀 Vital页面 - 初始化')
+    console.log('📋 设备信息:')
+    console.log('  - 设备ID:', deviceId || '❌ 未设置（必需）')
+    console.log('  - 设备名称:', deviceName)
+    console.log('  - 设备位置:', deviceLocation)
+    console.log('  - 设备类型:', deviceId ? getDeviceType(deviceId) : '未知')
+    console.log('👤 人员信息:')
+    console.log('  - 人员ID:', personId || '未设置')
+    console.log('  - 人员姓名:', personName)
+    console.log('  - 映射名称:', mappingName)
+    console.log('==================================================')
+    
+    // 检查设备ID是否存在
+    if (!deviceId) {
+      console.error('❌ 致命错误：设备ID未设置！无法建立WebSocket连接')
+      console.error('💡 请确保URL包含deviceId参数，例如：?deviceId=TI6843_VITAL_001')
+      showGlobalError('设备ID未设置，无法启动监测')
+      return
+    }
 
     if (this.$route.query.deviceId && this.$route.query.deviceId !== this.currentDeviceId) {
       this.setCurrentDevice(this.$route.query.deviceId)
     }
 
-    // 设置设备信息
+    // 设置设备信息（确保deviceId存在）
+    if (!deviceId) {
+      console.error('❌ 无法设置设备信息：设备ID缺失')
+      return
+    }
+    
     this.currentDevice = {
       id: deviceId,
       name: deviceName,
       location: deviceLocation,
       status: 'offline' // 初始状态为离线
     }
+    
+    console.log('✅ 设备信息已设置:', this.currentDevice)
 
     // 根据设备ID设置端口参数
     this.updateDevicePortConfig(deviceId)
@@ -482,8 +517,10 @@ export default {
     }
 
     // 如果有人员信息，更新页面标题
-    if (personName && personName !== '未知用户') {
+    if (personId && personId !== '未设置') {
       document.title = `${personName} - 呼吸心跳监测 - 雷达监测系统`
+    } else {
+      document.title = `呼吸心跳监测 - 雷达监测系统`
     }
 
     // 更新时间显示
@@ -499,8 +536,13 @@ export default {
     // 直接使用 import 的 dataManager 实例，避免 Vue 代理导致的问题
     // 监听全局数据更新，以处理设备ID不完全匹配的情况
     dataManager.on('dataUpdate', this.handleData)
+    
+    console.log(`📝 为设备 ${deviceId} 订阅数据`)
     dataManager.subscribeToDevice(deviceId, this.handleData)
+    
     dataManager.on('connectionChange', this.handleConnectionChange)
+    
+    console.log(`📝 当前订阅列表:`, Array.from(dataManager.deviceSubscriptions.keys()))
     
     this.restartDataManager()
   },
@@ -536,6 +578,16 @@ export default {
     ...mapActions(useDeviceStore, ['setCurrentDevice']),
     updateCurrentTime() {
       this.currentTime = new Date().toLocaleString()
+    },
+    // 动态更新页面标题
+    updatePageTitle() {
+      if (this.currentPerson.id && this.currentPerson.name) {
+        document.title = `${this.currentPerson.name} - 呼吸心跳监测 - 雷达监测系统`
+      } else if (this.currentPerson.id) {
+        document.title = `${this.currentPerson.id} - 呼吸心跳监测 - 雷达监测系统`
+      } else {
+        document.title = `呼吸心跳监测 - 雷达监测系统`
+      }
     },
     // 根据设备ID更新端口配置
     updateDevicePortConfig(deviceId) {
@@ -728,7 +780,13 @@ export default {
     handleData(data) {
       try {
         // 调试日志：确认 handleData 被调用
-        console.log('✅ Vital页面 - handleData被调用, 设备ID:', data?.deviceId, '数据:', data)
+        console.log('==========================================')
+        console.log('✅ Vital页面 - handleData被调用')
+        console.log('设备ID:', data?.deviceId)
+        console.log('心率:', data?.heartRate)
+        console.log('呼吸:', data?.respiration, data?.breathRate)
+        console.log('完整数据:', data)
+        console.log('==========================================')
 
         if (!data || typeof data !== 'object') {
           console.warn('Vital页面 - 数据格式无效:', data)
@@ -739,33 +797,102 @@ export default {
         const dataDeviceId = data.deviceId
         const currentDeviceId = this.currentDevice.id
         
-        // 宽松匹配设备ID：完全匹配，或者前缀匹配（处理 R60ABD1 vs R60ABD1_COM3 的情况）
-        const isMatch = dataDeviceId === currentDeviceId || 
-                        (dataDeviceId && currentDeviceId && dataDeviceId.startsWith(currentDeviceId)) ||
-                        (currentDeviceId === 'R60ABD1' && dataDeviceId && dataDeviceId.startsWith('R60ABD1'));
-
-        if (dataDeviceId && currentDeviceId && !isMatch) {
-          // console.log(`🚫 Vital页面 - 跳过非当前设备数据: 数据来自 ${dataDeviceId}, 当前设备 ${currentDeviceId}`)
-          return
+        console.log('🔍 设备ID匹配检查:')
+        console.log('   数据设备ID:', dataDeviceId)
+        console.log('   当前设备ID:', currentDeviceId)
+        console.log('   当前人员ID:', this.currentPerson.id)
+        
+        // 宽松匹配设备ID：支持 R60ABD1, TI6843_VITAL 等多种设备
+        let isMatch = false
+        
+        // 特殊情况：如果当前设备ID看起来像人员ID（如RD002），而数据有设备ID
+        // 则认为这是第一次接收数据，应该接受并更新订阅
+        const currentIdLooksLikePersonId = currentDeviceId && !currentDeviceId.includes('R60ABD1') && 
+                                           !currentDeviceId.includes('TI6843') && 
+                                           !currentDeviceId.includes('COM')
+        
+        if (currentIdLooksLikePersonId && dataDeviceId) {
+          console.log('⚠️ 检测到当前订阅的可能是人员ID，接受数据并更新订阅')
+          isMatch = true
+        } else if (dataDeviceId === currentDeviceId) {
+          // 完全匹配
+          console.log('✅ 设备ID完全匹配')
+          isMatch = true
+        } else if (dataDeviceId && currentDeviceId) {
+          // 前缀匹配：处理 R60ABD1 vs R60ABD1_COM3, TI6843_VITAL vs TI6843_VITAL_001 的情况
+          if (dataDeviceId.startsWith(currentDeviceId + '_') || 
+              currentDeviceId.startsWith(dataDeviceId + '_')) {
+            console.log('✅ 设备ID前缀匹配')
+            isMatch = true
+          }
+          // 特殊处理：TI6843_VITAL 匹配 TI6843 (如果当前设备类型是VITAL)
+          else if (currentDeviceId.toUpperCase().includes('TI6843') && 
+                   dataDeviceId.toUpperCase().includes('TI6843') &&
+                   currentDeviceId.toUpperCase().includes('VITAL') && 
+                   dataDeviceId.toUpperCase().includes('VITAL')) {
+            console.log('✅ TI6843_VITAL设备匹配')
+            isMatch = true
+          }
+          // 特殊处理：R60ABD1 通用匹配
+          else if (currentDeviceId.toUpperCase().includes('R60ABD1') && 
+                   dataDeviceId.toUpperCase().includes('R60ABD1')) {
+            console.log('✅ R60ABD1设备通用匹配')
+            isMatch = true
+          }
         }
 
-        // 如果检测到更具体的设备ID，更新当前设备ID（但不重新订阅，因为模糊匹配已经生效）
+        if (dataDeviceId && currentDeviceId && !isMatch) {
+          console.log(`🚫 Vital页面 - 跳过非当前设备数据`)
+          console.log(`   数据来自: ${dataDeviceId}`)
+          console.log(`   当前设备: ${currentDeviceId}`)
+          return
+        }
+        
+        if (isMatch) {
+          console.log('✅ 设备匹配成功，继续处理数据')
+        }
+
+        // 如果检测到更具体的设备ID，更新当前设备ID
         if (isMatch && dataDeviceId && dataDeviceId !== currentDeviceId) {
           console.log(`🔄 更新设备ID: ${currentDeviceId} -> ${dataDeviceId}`)
           
-          // 只更新设备ID，不需要重新订阅（因为DataManager已支持模糊匹配）
+          // 取消旧的订阅
+          dataManager.unsubscribeFromDevice(currentDeviceId, this.handleData)
+          
+          // 订阅新的设备ID
+          dataManager.subscribeToDevice(dataDeviceId, this.handleData)
+          
+          // 更新设备信息
           this.currentDevice.id = dataDeviceId
           this.updateDevicePortConfig(dataDeviceId)
+          
+          console.log(`✅ 已重新订阅设备: ${dataDeviceId}`)
         }
 
-        // 更新人员信息（如果数据中包含）
-        if (data.personId && (!this.currentPerson.id || this.currentPerson.id !== data.personId)) {
-          // console.log(`👤 更新人员ID: ${this.currentPerson.id} -> ${data.personId}`)
-          this.currentPerson.id = data.personId
-          // 如果没有名字，暂时用ID代替
-          if (!this.currentPerson.name || this.currentPerson.name === '未知用户') {
-             this.currentPerson.name = data.personId
+        // 更新人员信息（根据WebSocket数据）
+        if (data.personId !== undefined) {
+          // 如果personId存在且不为空
+          if (data.personId && data.personId.trim() !== '') {
+            // 更新或设置人员ID
+            if (this.currentPerson.id !== data.personId) {
+              console.log(`👤 更新人员ID: ${this.currentPerson.id || '无'} -> ${data.personId}`)
+              this.currentPerson.id = data.personId
+              // 如果没有名字，暂时用ID代替
+              if (!this.currentPerson.name || this.currentPerson.name === '未知用户' || this.currentPerson.name === '未绑定人员') {
+                this.currentPerson.name = data.personId
+              }
+            }
+          } else {
+            // personId为空，表示设备未绑定人员
+            if (this.currentPerson.id) {
+              console.log(`👤 设备未绑定人员，清除人员信息`)
+            }
+            this.currentPerson.id = ''
+            this.currentPerson.name = ''
           }
+          
+          // 动态更新页面标题
+          this.updatePageTitle()
         }
         
         // 记录数据接收时间
@@ -778,46 +905,59 @@ export default {
 
         // --- 数据处理节流 ---
         const now = Date.now()
-        if (now - this.lastDataUpdate < 100) { return }
+        if (now - this.lastDataUpdate < 50) { 
+          console.log('⏱️ 数据处理节流，跳过本次更新')
+          return 
+        }
         this.lastDataUpdate = now
+        console.log('⏱️ 开始处理数据...')
 
         // 1. 处理心率数据（固定字段）
         if (data.heartRate !== undefined && data.heartRate !== null) {
-          this.heartRate = Number(data.heartRate)
+          const newHeartRate = Number(data.heartRate)
+          console.log('💓 更新心率:', this.heartRate, '->', newHeartRate)
+          this.heartRate = newHeartRate
           this.heartStatus = this.evaluateStatus(this.heartRate, 'heart')
-          // console.log('✅ 心率:', this.heartRate)
         }
         // 优先使用波形数据，如果不存在则使用单个速率值
         if (data.heartRateWave && Array.isArray(data.heartRateWave)) {
           this.heartWaveform.unshift(...data.heartRateWave)
           if (this.heartWaveform.length > 100) {
-            this.heartWaveform.pop()
+            this.heartWaveform.splice(100)
           }
+          console.log('📊 更新心率波形，长度:', this.heartWaveform.length)
         } else if (data.heartRate !== undefined) {
           this.heartWaveform.unshift(Number(data.heartRate))
           if (this.heartWaveform.length > 30) {
-            this.heartWaveform.pop()
+            this.heartWaveform.splice(30)
           }
+          console.log('📊 添加心率数据点，长度:', this.heartWaveform.length)
         }
 
         // 2. 处理呼吸数据（固定字段）
         // DataManager 已经将 breathRate 统一映射为 respiration
-        if (data.respiration !== undefined && data.respiration !== null) {
-          this.breathRate = Number(data.respiration)
+        // 同时支持 respiration 和 breathRate 字段
+        const respirationValue = data.respiration || data.breathRate
+        if (respirationValue !== undefined && respirationValue !== null) {
+          const newBreathRate = Number(respirationValue)
+          console.log('🫁 更新呼吸:', this.breathRate, '->', newBreathRate)
+          this.breathRate = newBreathRate
           this.breathStatus = this.evaluateStatus(this.breathRate, 'breath')
-          // console.log('✅ 呼吸:', this.breathRate)
         }
         // 优先使用波形数据，如果不存在则使用单个速率值
+        const breathValue = data.respiration || data.breathRate
         if (data.respirationWave && Array.isArray(data.respirationWave)) {
           this.breathWaveform.unshift(...data.respirationWave)
           if (this.breathWaveform.length > 100) {
-            this.breathWaveform.pop()
+            this.breathWaveform.splice(100)
           }
-        } else if (data.respiration !== undefined) {
-          this.breathWaveform.unshift(Number(data.respiration))
+          console.log('📊 更新呼吸波形，长度:', this.breathWaveform.length)
+        } else if (breathValue !== undefined) {
+          this.breathWaveform.unshift(Number(breathValue))
           if (this.breathWaveform.length > 30) {
-            this.breathWaveform.pop()
+            this.breathWaveform.splice(30)
           }
+          console.log('📊 添加呼吸数据点，长度:', this.breathWaveform.length)
         }
 
         // 3. 处理体动数据（固定字段）
@@ -838,8 +978,14 @@ export default {
         this.lastError = null
         this.initialDataLoaded = true
 
+        console.log('📊 当前数据状态:')
+        console.log('   心率:', this.heartRate, '状态:', this.heartStatus)
+        console.log('   呼吸:', this.breathRate, '状态:', this.breathStatus)
+        console.log('   体动:', this.motionValue)
+
         // 更新图表
         this.updateWaveformChart()
+        console.log('✅ 图表已更新')
 
         // 检查异常
         this.checkForExceptions()
@@ -847,6 +993,7 @@ export default {
         // --- 强制UI更新 ---
         this.$nextTick(() => {
           this.$forceUpdate()
+          console.log('✅ UI已强制更新')
         })
       } catch (error) {
         console.error('处理数据失败:', error)
@@ -1030,17 +1177,20 @@ export default {
             }
           },
           axisLabel: {
-            color: '#9ca3af',
-            formatter: (value) => {
-              return value === 0 ? '现在' : `-${30 - value}s`
-            }
+            show: false  // 隐藏X轴标签，避免负数显示的逻辑混乱
+          },
+          axisTick: {
+            show: false
           }
         },
         yAxis: [
           {
             type: 'value',
-            name: '次/分',
+            name: '心率(bpm)',
             position: 'left',
+            min: 0,
+            max: 120,
+            interval: 20,
             axisLine: {
               show: true,
               lineStyle: {
@@ -1058,8 +1208,11 @@ export default {
           },
           {
             type: 'value',
-            name: '次/分',
+            name: '呼吸(次/分)',
             position: 'right',
+            min: 0,
+            max: 30,
+            interval: 5,
             axisLine: {
               show: true,
               lineStyle: {
@@ -1118,7 +1271,10 @@ export default {
     },
 
     updateWaveformChart() {
-      if (!this.waveformChartInstance) return
+      if (!this.waveformChartInstance) {
+        console.warn('⚠️ ECharts实例不存在，无法更新图表')
+        return
+      }
 
       // 确保数据长度一致
       const heartData = this.heartWaveform.slice(0, 30)
@@ -1132,12 +1288,18 @@ export default {
       heartData.reverse()
       breathData.reverse()
 
+      console.log('📊 更新ECharts图表数据:')
+      console.log('   心率数据:', heartData)
+      console.log('   呼吸数据:', breathData)
+
       this.waveformChartInstance.setOption({
         series: [
           { data: heartData },
           { data: breathData }
         ]
       })
+      
+      console.log('✅ ECharts图表更新完成')
     },
 
     handleChartResize() {

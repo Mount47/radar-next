@@ -19,9 +19,9 @@
               >
                 <el-option
                   v-for="person in personList"
-                  :key="person.id"
-                  :label="person.name"
-                  :value="person.id"
+                  :key="person.personId"
+                  :label="person.personName"
+                  :value="person.personId"
                 />
               </el-select>
             </div>
@@ -77,7 +77,7 @@
     </div>
 
     <!-- 统计数据区域 -->
-    <div class="statistics-section" v-if="statistics && Object.keys(statistics).length > 0">
+    <div class="statistics-section">
       <h3 class="section-title">历史统计</h3>
       
       <div class="stat-cards">
@@ -134,7 +134,7 @@
     </div>
 
     <!-- 图表区域 -->
-    <div class="chart-section" v-if="chartData.length > 0">
+    <div class="chart-section">
       <div class="chart-card">
         <div class="chart-header">
           <h3 class="section-title">趋势图表</h3>
@@ -218,13 +218,6 @@
         <el-button type="primary" @click="handleReset">重新搜索</el-button>
       </el-empty>
     </div>
-
-    <!-- 初始状态 -->
-    <div class="initial-state" v-if="!hasSearched">
-      <el-empty description="请选择搜索条件并点击搜索按钮">
-        <el-icon class="empty-icon"><Search /></el-icon>
-      </el-empty>
-    </div>
   </div>
 </template>
 
@@ -247,8 +240,15 @@ const searchForm = reactive({
 // 人员列表
 const personList = ref([])
 
-// 统计数据
-const statistics = ref({})
+// 统计数据 - 初始化为默认值
+const statistics = ref({
+  maxHeartRate: 0,
+  minHeartRate: 0,
+  avgHeartRate: 0,
+  maxBreathRate: 0,
+  minBreathRate: 0,
+  avgBreathRate: 0
+})
 
 // 图表数据
 const chartData = ref([])
@@ -328,6 +328,10 @@ onMounted(async () => {
   const start = new Date()
   start.setTime(start.getTime() - 3600 * 1000)
   searchForm.timeRange = [start, end]
+  
+  // 初始化图表，显示默认的0数据
+  await nextTick()
+  renderChart()
 })
 
 onBeforeUnmount(() => {
@@ -408,16 +412,21 @@ const handleSearch = async () => {
     
     // 处理统计数据
     const statsPayload = (statsRes && statsRes.data) ? statsRes.data : statsRes
-    statistics.value = statsPayload || {}
+    statistics.value = statsPayload || {
+      maxHeartRate: 0,
+      minHeartRate: 0,
+      avgHeartRate: 0,
+      maxBreathRate: 0,
+      minBreathRate: 0,
+      avgBreathRate: 0
+    }
     
     // 准备图表数据
     chartData.value = [...tableData.value].reverse()
     
-    // 渲染图表
+    // 渲染图表（始终渲染，即使数据为空）
     await nextTick()
-    if (chartData.value.length > 0) {
-      renderChart()
-    }
+    renderChart()
     
     if (tableData.value.length === 0) {
       ElMessage.info('未查询到数据')
@@ -426,8 +435,18 @@ const handleSearch = async () => {
     console.error('查询失败:', error)
     ElMessage.error('查询失败: ' + (error.message || '未知错误'))
     tableData.value = []
-    statistics.value = {}
+    statistics.value = {
+      maxHeartRate: 0,
+      minHeartRate: 0,
+      avgHeartRate: 0,
+      maxBreathRate: 0,
+      minBreathRate: 0,
+      avgBreathRate: 0
+    }
     chartData.value = []
+    // 即使失败也渲染图表显示0值
+    await nextTick()
+    renderChart()
   } finally {
     isLoading.value = false
   }
@@ -444,16 +463,23 @@ const handleReset = () => {
   searchForm.timeRange = [start, end]
   
   tableData.value = []
-  statistics.value = {}
+  statistics.value = {
+    maxHeartRate: 0,
+    minHeartRate: 0,
+    avgHeartRate: 0,
+    maxBreathRate: 0,
+    minBreathRate: 0,
+    avgBreathRate: 0
+  }
   chartData.value = []
   pagination.currentPage = 1
   pagination.total = 0
   hasSearched.value = false
   
-  if (chartInstance) {
-    chartInstance.dispose()
-    chartInstance = null
-  }
+  // 重置后重新渲染图表显示0值
+  nextTick(() => {
+    renderChart()
+  })
 }
 
 // 分页处理

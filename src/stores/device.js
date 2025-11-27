@@ -7,7 +7,7 @@ export const useDeviceStore = defineStore('device', {
     deviceList: [],
     loading: false,
     error: null,
-    currentDeviceId: 'RD002', // 默认设备ID
+    currentDeviceId: 'UnknownID', // 默认设备ID
     pagination: {
       currentPage: 1,
       pageSize: 10,

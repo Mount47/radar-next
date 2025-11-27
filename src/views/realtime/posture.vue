@@ -469,13 +469,15 @@ export default {
       pointCloudsGroup: null,
       keypointsGroup: null,
       animationFrame: null,
-      initialCameraPosition: { x: 5, y: 5, z: 5 }
+      initialCameraPosition: { x: 5, y: 5, z: 5 },
+      isDestroyed: false // 标记组件是否已销毁
     }
   },
   mounted() {
     this.initializeComponent()
   },
   beforeDestroy() {
+    this.isDestroyed = true
     this.cleanup()
   },
   methods: {
@@ -497,7 +499,8 @@ export default {
         // 明确禁用设备信息API调用
         console.warn('⚠️ 注意：TI6843不调用设备信息API，设备信息完全来自URL参数')
         
-        // 初始化3D可视化
+        // 等待DOM准备就绪后初始化3D可视化
+        await this.$nextTick()
         this.init3DVisualization()
         
         // 跳过初始数据获取，等待WebSocket数据
@@ -587,7 +590,16 @@ export default {
     cleanup() {
       console.log('🧹 清理组件资源')
       
-      // 停止动画
+      // 设置销毁标志
+      this.isDestroyed = true
+      
+      // 首先停止Three.js动画循环
+      if (this.animationFrame) {
+        cancelAnimationFrame(this.animationFrame)
+        this.animationFrame = null
+      }
+      
+      // 停止动画定时器
       this.stopAnimation()
       
       // 清除定时器
@@ -627,17 +639,66 @@ export default {
       window.removeEventListener('resize', this.onWindowResize)
       
       // 清理Three.js资源
-      if (this.renderer) {
-        this.renderer.dispose()
+      // 1. 先清理组
+      if (this.pointsGroup) {
+        this.clearGroup(this.pointsGroup)
+        this.pointsGroup = null
+      }
+      if (this.lineGroup) {
+        this.clearGroup(this.lineGroup)
+        this.lineGroup = null
+      }
+      if (this.pointCloudsGroup) {
+        this.clearGroup(this.pointCloudsGroup)
+        this.pointCloudsGroup = null
+      }
+      if (this.keypointsGroup) {
+        this.clearGroup(this.keypointsGroup)
+        this.keypointsGroup = null
       }
       
+      // 2. 清理控制器
       if (this.controls) {
         this.controls.dispose()
+        this.controls = null
       }
       
-      // 移除动画循环
-      if (this.animationFrame) {
-        cancelAnimationFrame(this.animationFrame)
+      // 3. 清理渲染器
+      if (this.renderer) {
+        if (this.renderer.domElement && this.renderer.domElement.parentNode) {
+          this.renderer.domElement.parentNode.removeChild(this.renderer.domElement)
+        }
+        this.renderer.dispose()
+        this.renderer = null
+      }
+      
+      // 4. 清理场景和相机
+      if (this.scene) {
+        this.scene.clear()
+        this.scene = null
+      }
+      
+      if (this.camera) {
+        this.camera = null
+      }
+      
+      console.log('✅ 组件资源清理完成')
+    },
+    
+    // 清理Three.js组的辅助方法
+    clearGroup(group) {
+      if (!group) return
+      while (group.children.length > 0) {
+        const object = group.children[0]
+        group.remove(object)
+        if (object.geometry) object.geometry.dispose()
+        if (object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach(mat => mat.dispose())
+          } else {
+            object.material.dispose()
+          }
+        }
       }
     },
 
@@ -1041,6 +1102,7 @@ export default {
     // ==================== 3D可视化控制 ====================
     
     setViewMode(mode) {
+      if (this.isDestroyed) return
       this.viewMode = mode
       console.log('🎨 切换显示模式:', mode)
       
@@ -1054,6 +1116,7 @@ export default {
     },
     
     resetCamera() {
+      if (this.isDestroyed) return
       if (this.camera && this.controls) {
         this.camera.position.set(
           this.initialCameraPosition.x,
@@ -1067,7 +1130,8 @@ export default {
     },
     
     updatePostureVisualization(data) {
-      if (!data) return
+      if (this.isDestroyed || !data) return
+      if (!this.scene || !this.camera || !this.renderer) return
       
       // 构造persons数据格式以兼容现有的3D渲染逻辑
       this.persons = []
@@ -1206,9 +1270,12 @@ export default {
     // ==================== Three.js 3D可视化 ====================
     
     onWindowResize() {
+      if (this.isDestroyed) return
       if (!this.camera || !this.renderer || !this.$refs.trajectoryContainer) return
 
       const container = this.$refs.trajectoryContainer
+      if (!container.clientWidth) return
+      
       this.width = container.clientWidth
 
       this.camera.aspect = this.width / this.height
@@ -1217,64 +1284,90 @@ export default {
     },
 
     init3DVisualization() {
+      // 如果已经有实例，先清理
+      if (this.scene || this.renderer) {
+        console.log('⚠️ 检测到已存在的Three.js实例，先清理')
+        this.cleanup()
+      }
+      
       const container = this.$refs.trajectoryContainer
+      if (!container) {
+        console.warn('⚠️ 3D容器未找到，跳过初始化')
+        return
+      }
+      
       this.width = container.clientWidth
       this.height = 400
 
       console.log('🎨 初始化3D可视化系统')
-
-      // 创建场景
-      this.scene = new THREE.Scene()
-      this.scene.background = new THREE.Color(0xf5f7fb)//3D图像背景色
-
-      // 创建相机
-      this.camera = new THREE.PerspectiveCamera(75, this.width / this.height, 0.1, 1000)
-      this.camera.position.set(
-        this.initialCameraPosition.x,
-        this.initialCameraPosition.y,
-        this.initialCameraPosition.z
-      )
-      this.camera.lookAt(0, 0, 0)
-
-      // 创建渲染器
-      this.renderer = new THREE.WebGLRenderer({ antialias: true })
-      this.renderer.setSize(this.width, this.height)
-      this.renderer.shadowMap.enabled = true
-      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
-      container.appendChild(this.renderer.domElement)
-
-      // 添加轨道控制器
-      this.controls = new OrbitControls(this.camera, this.renderer.domElement)
-      this.controls.enableDamping = true
-      this.controls.dampingFactor = 0.25
-      this.controls.screenSpacePanning = false
-      this.controls.maxPolarAngle = Math.PI / 2
-
-      // 创建坐标轴辅助
-      const axesHelper = new THREE.AxesHelper(5)
-      this.scene.add(axesHelper)
-
-      // 创建网格
-      this.addGrid()
-
-      // 创建不同功能的组
-      this.pointsGroup = new THREE.Group() // 轨迹点
-      this.lineGroup = new THREE.Group() // 轨迹线
-      this.pointCloudsGroup = new THREE.Group() // 点云数据
-      this.keypointsGroup = new THREE.Group() // 关键点数据
       
-      this.scene.add(this.pointsGroup)
-      this.scene.add(this.lineGroup)
-      this.scene.add(this.pointCloudsGroup)
-      this.scene.add(this.keypointsGroup)
+      try {
+        // 创建场景
+        this.scene = new THREE.Scene()
+        this.scene.background = new THREE.Color(0xf5f7fb)//3D图像背景色
 
-      // 添加灯光系统
-      this.setupLighting()
+        // 创建相机
+        this.camera = new THREE.PerspectiveCamera(75, this.width / this.height, 0.1, 1000)
+        this.camera.position.set(
+          this.initialCameraPosition.x,
+          this.initialCameraPosition.y,
+          this.initialCameraPosition.z
+        )
+        this.camera.lookAt(0, 0, 0)
 
-      // 开始动画循环
-      this.animate()
-      
-      console.log('✅ 3D可视化系统初始化完成')
+        // 创建渲染器
+        this.renderer = new THREE.WebGLRenderer({ antialias: true })
+        this.renderer.setSize(this.width, this.height)
+        this.renderer.shadowMap.enabled = true
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+        container.appendChild(this.renderer.domElement)
+
+        // 添加轨道控制器
+        this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+        this.controls.enableDamping = true
+        this.controls.dampingFactor = 0.25
+        this.controls.screenSpacePanning = false
+        this.controls.maxPolarAngle = Math.PI / 2
+
+        // 创建坐标轴辅助
+        const axesHelper = new THREE.AxesHelper(5)
+        this.scene.add(axesHelper)
+
+        // 创建网格
+        this.addGrid()
+
+        // 创建不同功能的组
+        this.pointsGroup = new THREE.Group() // 轨迹点
+        this.lineGroup = new THREE.Group() // 轨迹线
+        this.pointCloudsGroup = new THREE.Group() // 点云数据
+        this.keypointsGroup = new THREE.Group() // 关键点数据
+        
+        this.scene.add(this.pointsGroup)
+        this.scene.add(this.lineGroup)
+        this.scene.add(this.pointCloudsGroup)
+        this.scene.add(this.keypointsGroup)
+
+        // 添加灯光系统
+        this.setupLighting()
+
+        // 确保isDestroyed标志为false
+        this.isDestroyed = false
+        
+        // 确保所有矩阵都已更新
+        this.camera.updateProjectionMatrix()
+        this.camera.updateMatrixWorld(true)
+        if (this.scene) {
+          this.scene.updateMatrixWorld(true)
+        }
+        
+        // 开始动画循环
+        this.animate()
+        
+        console.log('✅ 3D可视化系统初始化完成')
+      } catch (error) {
+        console.error('❌ 3D可视化初始化失败:', error)
+        this.isDestroyed = true
+      }
     },
     
     setupLighting() {
@@ -1297,20 +1390,42 @@ export default {
     },
 
     animate() {
-      this.animationFrame = requestAnimationFrame(this.animate)
-
-      // 更新控制器
-      if (this.controls) {
-        this.controls.update()
+      // 检查组件是否已销毁
+      if (this.isDestroyed) {
+        return
       }
+      
+      // 检查必要的对象是否存在
+      if (!this.renderer || !this.scene || !this.camera) {
+        return
+      }
+      
+      // 先请求下一帧动画（在渲染之前）
+      this.animationFrame = requestAnimationFrame(() => this.animate())
+      
+      try {
+        // 更新控制器
+        if (this.controls && !this.isDestroyed) {
+          this.controls.update()
+        }
 
-      // 渲染场景
-      if (this.renderer && this.scene && this.camera) {
-        this.renderer.render(this.scene, this.camera)
+        // 渲染场景
+        if (!this.isDestroyed && this.renderer && this.scene && this.camera) {
+          this.renderer.render(this.scene, this.camera)
+        }
+      } catch (error) {
+        console.error('Three.js渲染错误:', error)
+        this.isDestroyed = true
+        // 确保停止动画循环
+        if (this.animationFrame) {
+          cancelAnimationFrame(this.animationFrame)
+          this.animationFrame = null
+        }
       }
     },
 
     clearTrajectoryScene() {
+      if (this.isDestroyed) return
       // 只清除轨迹相关的点和线
       if (this.pointsGroup) {
         while (this.pointsGroup.children.length > 0) {
@@ -1332,6 +1447,7 @@ export default {
     },
 
     clearPostureScene() {
+      if (this.isDestroyed) return
       // 只清除位姿相关的点云和关键点
       if (this.pointCloudsGroup) {
         while (this.pointCloudsGroup.children.length > 0) {
@@ -1353,7 +1469,8 @@ export default {
     },
 
     updateTrajectory3D() {
-      if (!this.displayPoints.length) return
+      if (this.isDestroyed || !this.displayPoints.length) return
+      if (!this.scene || !this.pointsGroup || !this.lineGroup) return
 
       // 清除现有的轨迹点和线
       this.clearTrajectoryScene()
@@ -1413,6 +1530,9 @@ export default {
     },
 
     update3DView() {
+      if (this.isDestroyed) return
+      if (!this.scene || !this.pointCloudsGroup || !this.keypointsGroup) return
+      
       // 清除旧的位姿数据
       this.clearPostureScene()
 
@@ -1442,6 +1562,7 @@ export default {
     },
     
     renderPointClouds(pointClouds, color) {
+      if (this.isDestroyed || !this.pointCloudsGroup) return
       try {
         const positions = []
         let validPointCount = 0
@@ -1494,6 +1615,7 @@ export default {
     },
     
     renderKeypoints(keypoints, color) {
+      if (this.isDestroyed || !this.keypointsGroup) return
       try {
         let validKeypointCount = 0
         const keypointGeometry = new THREE.SphereGeometry(0.03, 8, 8)
