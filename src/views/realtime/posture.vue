@@ -676,7 +676,7 @@ export default {
       const mode = this.viewMode
       this.pointCloudGroup.visible = mode === 'all' || mode === 'pointcloud'
       this.keypointGroup.visible = mode === 'all' || mode === 'keypoints'
-      this.trajectoryGroup.visible = mode === 'all' || mode === 'trajectory'
+      this.trajectoryGroup.visible = mode === 'trajectory'
 
       this.renderer.render(this.scene, this.camera)
     },
@@ -708,7 +708,7 @@ export default {
 
         if (points.length > 0) {
             const geometry = new THREE.BufferGeometry().setFromPoints(points)
-            const material = new THREE.PointsMaterial({ color: 0x0088ff, size: 0.1 })
+            const material = new THREE.PointsMaterial({ color: 0x0088ff, size: 0.03 })
             const cloud = new THREE.Points(geometry, material)
             this.pointCloudGroup.add(cloud)
         }
@@ -732,7 +732,7 @@ export default {
             centerPoint = points[0] // Use first point for trajectory
             
             points.forEach(p => {
-                const geometry = new THREE.SphereGeometry(0.1, 16, 16)
+                const geometry = new THREE.SphereGeometry(0.03, 16, 16)
                 const material = new THREE.MeshStandardMaterial({ color: 0xff0000 })
                 const sphere = new THREE.Mesh(geometry, material)
                 sphere.position.copy(p)
@@ -761,7 +761,7 @@ export default {
         if (this.trajectoryPoints.length > 1) {
             const points = this.trajectoryPoints.map(p => p.position)
             const curve = new THREE.CatmullRomCurve3(points)
-            const geometry = new THREE.TubeGeometry(curve, points.length * 2, 0.05, 8, false)
+            const geometry = new THREE.TubeGeometry(curve, points.length * 2, 0.005, 8, false)
             const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 })
             const mesh = new THREE.Mesh(geometry, material)
             this.trajectoryGroup.add(mesh)
@@ -1564,15 +1564,20 @@ export default {
     },
     
     /**
-     * 处理新跌倒警报
+     * 处理新跌倒警报 - 只添加到列表，不弹窗、不播放声音、不通知
      */
     handleNewFallAlert(alert) {
-      console.log('🚨 收到跌倒警报数据 (已禁用弹窗):', alert)
-      // 用户要求移除跌倒提示框，因此不再将警报添加到活跃列表
-      // const existingIndex = this.activeFallAlerts.findIndex(a => a.id === alert.id)
-      // if (existingIndex === -1) {
-      //   this.activeFallAlerts.unshift(alert)
-      // }
+      console.log('🚨 收到跌倒警报，添加到最近异常警告列表:', alert)
+      
+      // 检查是否已存在该警报
+      const existingIndex = this.activeFallAlerts.findIndex(a => a.id === alert.id)
+      if (existingIndex === -1) {
+        // 添加到列表开头（最新的在最上面）
+        this.activeFallAlerts.unshift(alert)
+        console.log(`✅ 警报已添加到列表，当前共 ${this.activeFallAlerts.length} 条活跃警报`)
+      } else {
+        console.log('⚠️ 警报已存在，跳过添加')
+      }
     },
     
     /**

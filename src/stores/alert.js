@@ -215,13 +215,13 @@ export const useAlertStore = defineStore('alert', () => {
       activeFallAlerts.value.unshift(alertData)
     }
     
-    // 如果是活跃警报，添加到全局队列
-    if (alertData.isActive && alertData.alertStatus === 'NEW') {
-      addToGlobalQueue({
-        type: 'fall',
-        data: alertData
-      })
-    }
+    // 不再弹出全局警报弹窗，只在列表中显示
+    // if (alertData.isActive && alertData.alertStatus === 'NEW') {
+    //   addToGlobalQueue({
+    //     type: 'fall',
+    //     data: alertData
+    //   })
+    // }
     
     // 更新统计
     fetchFallAlertStatistics()
