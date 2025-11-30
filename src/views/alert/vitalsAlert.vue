@@ -6,7 +6,7 @@
         <div class="header-left">
           <p class="eyebrow">生命体征监测</p>
           <h1 class="page-title">生命体征异常日志</h1>
-          <p class="page-subtitle">实时监控心率与呼吸异常，保障健康安全</p>
+          <!-- <p class="page-subtitle">实时监控心率与呼吸异常，保障健康安全</p> -->
         </div>
         <div class="header-stats">
           <div class="stat-card critical">
@@ -462,8 +462,8 @@ onUnmounted(() => {
 .page-header {
   padding: 32px;
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.12), rgba(234, 88, 12, 0.08));
-  border: 1px solid rgba(249, 115, 22, 0.15);
+  background: linear-gradient(135deg, rgba(132, 94, 247, 0.15), rgba(94, 233, 255, 0.18));
+  border: 1px solid rgba(132, 94, 247, 0.2);
 }
 
 .header-content {
@@ -481,7 +481,7 @@ onUnmounted(() => {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-size: 13px;
-  color: #ea580c;
+  color: #845ef7;
   margin: 0 0 8px;
   font-weight: 700;
 }
@@ -515,8 +515,8 @@ onUnmounted(() => {
 }
 
 .stat-card.critical {
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(234, 88, 12, 0.1));
-  border-color: rgba(249, 115, 22, 0.2);
+  background: linear-gradient(135deg, rgba(132, 94, 247, 0.15), rgba(94, 233, 255, 0.12));
+  border-color: rgba(132, 94, 247, 0.25);
 }
 
 .stat-value {
@@ -528,7 +528,7 @@ onUnmounted(() => {
 }
 
 .stat-card.critical .stat-value {
-  color: #ea580c;
+  color: #845ef7;
 }
 
 .stat-label {
@@ -570,7 +570,7 @@ onUnmounted(() => {
 
 .alert-badge {
   display: inline-block;
-  background: #f97316;
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
   color: white;
   font-size: 14px;
   font-weight: 700;
@@ -581,7 +581,7 @@ onUnmounted(() => {
 }
 
 .alert-badge.warning {
-  background: #f59e0b;
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
 }
 
 /* 时间线 */
@@ -597,7 +597,7 @@ onUnmounted(() => {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: linear-gradient(180deg, #f97316, rgba(249, 115, 22, 0.1));
+  background: linear-gradient(180deg, #845ef7, rgba(132, 94, 247, 0.1));
 }
 
 .timeline-item {
@@ -611,14 +611,14 @@ onUnmounted(() => {
 }
 
 .timeline-item:hover {
-  border-color: rgba(249, 115, 22, 0.3);
-  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.1);
+  border-color: rgba(132, 94, 247, 0.3);
+  box-shadow: 0 4px 12px rgba(132, 94, 247, 0.15);
   transform: translateX(4px);
 }
 
 .timeline-item.critical {
-  border-color: rgba(234, 88, 12, 0.3);
-  background: rgba(249, 115, 22, 0.02);
+  border-color: rgba(132, 94, 247, 0.35);
+  background: rgba(132, 94, 247, 0.02);
 }
 
 .timeline-marker {
@@ -628,14 +628,14 @@ onUnmounted(() => {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #f97316;
+  background: #845ef7;
   border: 2px solid white;
-  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
+  box-shadow: 0 0 0 2px rgba(132, 94, 247, 0.2);
 }
 
 .timeline-marker.critical {
-  background: #ea580c;
-  box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.3), 0 0 8px rgba(234, 88, 12, 0.4);
+  background: #845ef7;
+  box-shadow: 0 0 0 2px rgba(132, 94, 247, 0.3), 0 0 8px rgba(132, 94, 247, 0.4);
   animation: pulse 2s ease-in-out infinite;
 }
 
@@ -667,8 +667,8 @@ onUnmounted(() => {
 }
 
 .alert-type-badge.heart-type {
-  background: rgba(239, 68, 68, 0.12);
-  color: #dc2626;
+  background: rgba(132, 94, 247, 0.12);
+  color: #845ef7;
 }
 
 .alert-type-badge.breath-type {
@@ -685,13 +685,13 @@ onUnmounted(() => {
 }
 
 .severity-badge.high {
-  background: rgba(251, 191, 36, 0.15);
-  color: #f59e0b;
+  background: rgba(94, 233, 255, 0.15);
+  color: #0ea5e9;
 }
 
 .severity-badge.critical {
-  background: rgba(239, 68, 68, 0.15);
-  color: #dc2626;
+  background: rgba(132, 94, 247, 0.15);
+  color: #845ef7;
 }
 
 .timeline-time {
@@ -769,7 +769,7 @@ onUnmounted(() => {
 }
 
 .type-cell.heart-type .type-text {
-  color: #dc2626;
+  color: #845ef7;
 }
 
 .type-cell.breath-type .type-text {

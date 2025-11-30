@@ -6,7 +6,7 @@
         <div class="header-left">
           <p class="eyebrow">跌倒警报</p>
           <h1 class="page-title">跌倒警报处理中心</h1>
-          <p class="page-subtitle">实时监控与快速响应，确保人员安全</p>
+          <!-- <p class="page-subtitle">实时监控与快速响应，确保人员安全</p> -->
         </div>
         <div class="header-stats">
           <div class="stat-card urgent">
@@ -548,8 +548,8 @@ onUnmounted(() => {
 .page-header {
   padding: 32px;
   border-radius: 20px;
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(220, 38, 38, 0.08));
-  border: 1px solid rgba(239, 68, 68, 0.15);
+  background: linear-gradient(135deg, rgba(132, 94, 247, 0.15), rgba(94, 233, 255, 0.18));
+  border: 1px solid rgba(132, 94, 247, 0.2);
 }
 
 .header-content {
@@ -567,7 +567,7 @@ onUnmounted(() => {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-size: 13px;
-  color: #dc2626;
+  color: #845ef7;
   margin: 0 0 8px;
   font-weight: 700;
 }
@@ -601,8 +601,8 @@ onUnmounted(() => {
 }
 
 .stat-card.urgent {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.1));
-  border-color: rgba(239, 68, 68, 0.2);
+  background: linear-gradient(135deg, rgba(132, 94, 247, 0.15), rgba(94, 233, 255, 0.12));
+  border-color: rgba(132, 94, 247, 0.25);
 }
 
 .stat-value {
@@ -614,7 +614,7 @@ onUnmounted(() => {
 }
 
 .stat-card.urgent .stat-value {
-  color: #dc2626;
+  color: #845ef7;
 }
 
 .stat-label {
@@ -671,7 +671,7 @@ onUnmounted(() => {
 
 .alert-badge {
   display: inline-block;
-  background: #dc2626;
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
   color: white;
   font-size: 14px;
   font-weight: 700;
@@ -695,7 +695,7 @@ onUnmounted(() => {
 
 .alert-card {
   background: white;
-  border: 2px solid rgba(239, 68, 68, 0.2);
+  border: 2px solid rgba(132, 94, 247, 0.2);
   border-radius: 18px;
   padding: 24px;
   transition: all 0.3s;
@@ -710,17 +710,17 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #ef4444, #dc2626);
+  background: linear-gradient(90deg, #845ef7, #5ee9ff);
 }
 
 .alert-card.critical {
-  border-color: rgba(220, 38, 38, 0.4);
-  box-shadow: 0 8px 24px rgba(220, 38, 38, 0.15);
+  border-color: rgba(132, 94, 247, 0.35);
+  box-shadow: 0 8px 24px rgba(132, 94, 247, 0.15);
 }
 
 .alert-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(239, 68, 68, 0.2);
+  box-shadow: 0 12px 32px rgba(132, 94, 247, 0.25);
 }
 
 .card-header {
@@ -742,18 +742,18 @@ onUnmounted(() => {
 
 .severity-indicator.high,
 .severity-indicator.critical {
-  background: rgba(239, 68, 68, 0.15);
-  color: #dc2626;
+  background: rgba(132, 94, 247, 0.15);
+  color: #845ef7;
 }
 
 .severity-indicator.medium {
-  background: rgba(251, 191, 36, 0.15);
-  color: #f59e0b;
+  background: rgba(94, 233, 255, 0.15);
+  color: #0ea5e9;
 }
 
 .status-indicator.new {
-  background: rgba(239, 68, 68, 0.15);
-  color: #dc2626;
+  background: rgba(132, 94, 247, 0.15);
+  color: #845ef7;
 }
 
 .status-indicator.pending {
@@ -778,11 +778,11 @@ onUnmounted(() => {
   width: 56px;
   height: 56px;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.08));
+  background: linear-gradient(135deg, rgba(132, 94, 247, 0.12), rgba(94, 233, 255, 0.12));
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #dc2626;
+  color: #845ef7;
   flex-shrink: 0;
 }
 
@@ -854,13 +854,13 @@ onUnmounted(() => {
 }
 
 .action-btn.primary {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
+  background: linear-gradient(135deg, #845ef7, #5ee9ff);
   color: white;
 }
 
 .action-btn.primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 8px 16px rgba(132, 94, 247, 0.35);
 }
 
 .action-btn.success {

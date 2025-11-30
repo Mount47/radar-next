@@ -1,28 +1,37 @@
 <template>
-  <div class="overview">
+  <div class="overview" v-loading="initialLoading" element-loading-text="加载中...">
     <section class="hero">
       <div>
         <p class="eyebrow">概览中心</p>
-        <h1>柔和渐变的全局健康雷达中枢</h1>
-        <p class="lede">
-          统一的视觉与交互语系贯穿概览、人员、设备、绑定、实时监测、历史数据与告警模块。
-          通过卡片化与柔光阴影的布局，快速感知整体运行态势并进入下一步操作。
-        </p>
+        <h1>全局健康雷达中枢</h1>
+        <!-- <p class="lede">
+          实时监控设备运行状态、人员健康数据与告警信息，快速掌握整体态势。
+        </p> -->
         <div class="chips">
-          <span class="chip">渐变主色</span>
-          <span class="chip">卡片化</span>
-          <span class="chip">柔光阴影</span>
-          <span class="chip">高亮导航</span>
+          <span class="chip">最后更新：{{ lastUpdateTime }}</span>
+          <span class="chip" :class="{ 'chip-pulse': autoRefresh }">
+            {{ autoRefresh ? '自动刷新中' : '已暂停刷新' }}
+          </span>
         </div>
+      </div>
+      <div class="hero-actions">
+        <button class="primary" @click="handleRefreshAll">
+          <span>{{ refreshing ? '刷新中...' : '立即刷新' }}</span>
+        </button>
+        <!-- <button class="ghost" @click="toggleAutoRefresh">
+          {{ autoRefresh ? '暂停自动刷新' : '开启自动刷新' }}
+        </button> -->
       </div>
       <div class="glow"></div>
     </section>
 
     <section class="grid metrics">
-      <div v-for="metric in metrics" :key="metric.title" class="card metric">
+      <div v-for="metric in computedMetrics" :key="metric.title" class="card metric">
         <div class="metric-head">
           <span class="label">{{ metric.title }}</span>
-          <span :class="['pill', metric.trend === 'up' ? 'positive' : 'negative']">{{ metric.delta }}</span>
+          <span v-if="metric.delta" :class="['pill', metric.trend === 'up' ? 'positive' : metric.trend === 'down' ? 'negative' : 'subtle']">
+            {{ metric.delta }}
+          </span>
         </div>
         <div class="metric-value">
           <span class="value">{{ metric.value }}</span>
@@ -39,26 +48,34 @@
       <div class="card large">
         <div class="section-head">
           <div>
-            <p class="eyebrow">实时监测快照</p>
-            <h3>最新检测与更新时间</h3>
+            <p class="eyebrow">实时告警监控</p>
+            <h3>待处理告警与最新动态</h3>
           </div>
-          <span class="pill subtle">最近更新 {{ lastUpdated }}</span>
+          <span class="pill" :class="totalActiveAlerts > 0 ? 'negative' : 'positive'">
+            {{ totalActiveAlerts > 0 ? `${totalActiveAlerts} 条待处理` : '无告警' }}
+          </span>
         </div>
-        <div class="sparkline">
-          <div v-for="(bar, index) in sparkline" :key="index" class="bar" :style="{ height: `${bar}px` }"></div>
-        </div>
-        <div class="list">
-          <div v-for="item in snapshots" :key="item.time" class="list-row">
-            <div>
-              <p class="strong">{{ item.title }}</p>
-              <p class="muted">{{ item.detail }}</p>
+        
+        <div v-if="recentAlerts.length > 0" class="list">
+          <div v-for="alert in recentAlerts.slice(0, 5)" :key="alert.id" class="list-row alert-row">
+            <span :class="['pill', alert.severity === 'CRITICAL' ? 'negative' : alert.severity === 'WARNING' ? 'warning' : 'subtle']">
+              {{ alert.type }}
+            </span>
+            <div class="alert-body">
+              <p class="strong">{{ alert.title }}</p>
+              <p class="muted">{{ alert.detail }}</p>
             </div>
-            <span class="pill subtle">{{ item.time }}</span>
+            <button class="link" @click="handleGoToAlert(alert)">去处理</button>
           </div>
         </div>
+        <div v-else class="empty-state">
+          <p class="muted">🎉 暂无待处理告警</p>
+        </div>
+        
         <div class="actions">
-          <button class="ghost">查看实时监测</button>
-          <button class="primary">刷新数据</button>
+          <button class="ghost" @click="$router.push('/alert/fall')">跌倒告警</button>
+          <button class="ghost" @click="$router.push('/alert/vitals')">生命体征告警</button>
+          <button class="primary" @click="handleRefreshAlerts">刷新告警</button>
         </div>
       </div>
 
@@ -66,25 +83,27 @@
         <div class="section-head">
           <div>
             <p class="eyebrow">设备与人员状态</p>
-            <h3>在线/离线与活跃对象</h3>
+            <h3>实时在线监控</h3>
           </div>
-          <span class="pill positive">运行平稳</span>
+          <span class="pill" :class="deviceOnlineRate >= 90 ? 'positive' : deviceOnlineRate >= 70 ? 'warning' : 'negative'">
+            {{ deviceOnlineRate >= 90 ? '运行良好' : deviceOnlineRate >= 70 ? '需关注' : '异常' }}
+          </span>
         </div>
         <div class="status-grid">
-          <div v-for="block in statusBlocks" :key="block.title" class="status-card" :style="{ background: block.background }">
+          <div v-for="block in computedStatusBlocks" :key="block.title" class="status-card" :style="{ background: block.background }">
             <p class="label">{{ block.title }}</p>
             <p class="status-value">{{ block.value }}</p>
             <p class="muted">{{ block.sub }}</p>
           </div>
         </div>
         <div class="list tight">
-          <p class="eyebrow">Top 5 动态</p>
-          <div v-for="item in topList" :key="item.name" class="list-row">
+          <p class="eyebrow">设备型号分布</p>
+          <div v-for="model in deviceModelStats.slice(0, 5)" :key="model.type" class="list-row">
             <div>
-              <p class="strong">{{ item.name }}</p>
-              <p class="muted">{{ item.note }}</p>
+              <p class="strong">{{ model.type || '未知型号' }}</p>
+              <p class="muted">占比 {{ model.percentage }}%</p>
             </div>
-            <span :class="['pill', item.type === 'alert' ? 'negative' : 'subtle']">{{ item.tag }}</span>
+            <span class="pill subtle">{{ model.count }} 台</span>
           </div>
         </div>
       </div>
@@ -94,35 +113,82 @@
       <div class="card large chart">
         <div class="section-head">
           <div>
-            <p class="eyebrow">告警与历史趋势</p>
-            <h3>近 24h 告警走势</h3>
+            <p class="eyebrow">告警趋势分析</p>
+            <h3>近 24h 告警统计</h3>
           </div>
-          <span class="pill subtle">面积图占位</span>
+          <span class="pill subtle">
+            今日 {{ todayAlertCount }} 条
+          </span>
         </div>
-        <div class="trend">
-          <div class="trend-area"></div>
-          <div class="trend-grid">
-            <span v-for="hour in hours" :key="hour">{{ hour }}</span>
+        <div class="alert-type-stats">
+          <div class="stat-item">
+            <span class="stat-label">跌倒告警</span>
+            <span class="stat-value critical">{{ fallAlertStats.today }}</span>
           </div>
+          <div class="stat-item">
+            <span class="stat-label">心率异常</span>
+            <span class="stat-value warning">{{ vitalsAlertStats.heart }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">呼吸异常</span>
+            <span class="stat-value warning">{{ vitalsAlertStats.breath }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">心电异常</span>
+            <span class="stat-value info">{{ ecgAlertStats.total }}</span>
+          </div>
+        </div>
+        <div class="trend-summary">
+          <p class="muted">
+            今日告警总数较昨日 
+            <span :class="alertTrend > 0 ? 'text-danger' : 'text-success'">
+              {{ alertTrend > 0 ? '增加' : '减少' }} {{ Math.abs(alertTrend) }}%
+            </span>
+          </p>
         </div>
       </div>
 
       <div class="card large">
         <div class="section-head">
           <div>
-            <p class="eyebrow">待处理告警</p>
-            <h3>等级、来源与时间</h3>
+            <p class="eyebrow">人员健康概览</p>
+            <h3>监测人员统计</h3>
           </div>
-          <button class="ghost">查看全部</button>
+          <button class="ghost" @click="$router.push('/person')">查看全部</button>
         </div>
-        <div class="list">
-          <div v-for="alert in alerts" :key="alert.source" class="list-row">
-            <span :class="['pill', alert.level === '高' ? 'negative' : 'warning']">{{ alert.level }}级</span>
-            <div class="alert-body">
-              <p class="strong">{{ alert.source }}</p>
-              <p class="muted">{{ alert.time }}</p>
+        
+        <div class="person-stats-grid">
+          <div class="person-stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-info">
+              <div class="stat-number">{{ personStats.total }}</div>
+              <div class="stat-text">总人数</div>
             </div>
-            <button class="link">去处理</button>
+          </div>
+          <div class="person-stat-card">
+            <div class="stat-icon">👨</div>
+            <div class="stat-info">
+              <div class="stat-number">{{ personStats.male }}</div>
+              <div class="stat-text">男性</div>
+            </div>
+          </div>
+          <div class="person-stat-card">
+            <div class="stat-icon">👩</div>
+            <div class="stat-info">
+              <div class="stat-number">{{ personStats.female }}</div>
+              <div class="stat-text">女性</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="list">
+          <p class="eyebrow">部门分布 Top 5</p>
+          <div v-for="dept in topDepartments.slice(0, 5)" :key="dept.name" class="list-row">
+            <div>
+              <p class="strong">{{ dept.name || '未分配' }}</p>
+              <p class="muted">占比 {{ dept.percentage }}%</p>
+            </div>
+            <span class="pill subtle">{{ dept.count }} 人</span>
           </div>
         </div>
       </div>
@@ -136,9 +202,15 @@
         </div>
       </div>
       <div class="chips">
-        <button v-for="action in quickActions" :key="action.label" class="chip-button">
+        <button 
+          v-for="action in quickActions" 
+          :key="action.label" 
+          class="chip-button"
+          @click="handleQuickAction(action)"
+        >
           <span>{{ action.label }}</span>
           <span class="muted">{{ action.note }}</span>
+          <span v-if="action.badge" class="action-badge">{{ action.badge }}</span>
         </button>
       </div>
     </section>
@@ -146,90 +218,552 @@
 </template>
 
 <script setup>
-const metrics = [
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useDeviceStore } from '@/stores/device'
+import { usePersonStore } from '@/stores/person'
+import { useAlertStore } from '@/stores/alert'
+import { useStatsStore } from '@/stores/stats'
+import { getPersonDeviceMappings } from '@/api/person-device-mapping'
+import { ElMessage } from 'element-plus'
+
+const router = useRouter()
+const deviceStore = useDeviceStore()
+const personStore = usePersonStore()
+const alertStore = useAlertStore()
+const statsStore = useStatsStore()
+
+// ==================== 状态管理 ====================
+const initialLoading = ref(true)
+const refreshing = ref(false)
+const autoRefresh = ref(true)
+const lastUpdateTime = ref('--:--:--')
+const refreshTimer = ref(null)
+
+// 设备数据
+const deviceList = ref([])
+const deviceStatistics = ref({
+  totalDevices: 0,
+  onlineDevices: 0,
+  offlineDevices: 0,
+  maintenanceDevices: 0
+})
+
+// 人员数据
+const personList = ref([])
+const personStatistics = ref({
+  total: 0,
+  male: 0,
+  female: 0,
+  departments: {}
+})
+
+// 绑定数据
+const mappingCount = ref(0)
+
+// 告警数据
+const fallAlerts = ref([])
+const vitalsAlerts = ref([])
+
+// ==================== 计算属性 ====================
+
+// 核心指标卡片
+const computedMetrics = computed(() => {
+  const total = deviceStatistics.value.totalDevices || 0
+  const online = deviceStatistics.value.onlineDevices || 0
+  const onlineRate = total > 0 ? Math.round((online / total) * 100) : 0
+  
+  const personTotal = personStatistics.value.total || 0
+  
+  const totalAlerts = fallAlerts.value.length + vitalsAlerts.value.length
+  
+  return [
+    {
+      title: '在线设备',
+      value: online.toString(),
+      unit: `/ ${total}`,
+      delta: `${onlineRate}%`,
+      trend: onlineRate >= 90 ? 'up' : onlineRate >= 70 ? 'neutral' : 'down',
+      fill: onlineRate,
+      tint: 'linear-gradient(90deg, #5ee9ff, #4dabf7)',
+      note: total > 0 ? `在线率 ${onlineRate}%，${deviceStatistics.value.offlineDevices} 台离线` : '暂无设备数据'
+    },
+    {
+      title: '监测人员',
+      value: personTotal.toString(),
+      unit: '人',
+      delta: mappingCount.value > 0 ? `${mappingCount.value} 对绑定` : '未绑定',
+      trend: mappingCount.value > 0 ? 'up' : 'neutral',
+      fill: personTotal > 0 ? Math.min(100, (mappingCount.value / personTotal) * 100) : 0,
+      tint: 'linear-gradient(90deg, #845ef7, #5ee9ff)',
+      note: `男 ${personStatistics.value.male} / 女 ${personStatistics.value.female}，绑定率 ${personTotal > 0 ? Math.round((mappingCount.value / personTotal) * 100) : 0}%`
+    },
+    {
+      title: '活跃绑定',
+      value: mappingCount.value.toString(),
+      unit: '对',
+      delta: personTotal > 0 ? `${Math.round((mappingCount.value / personTotal) * 100)}%` : '0%',
+      trend: mappingCount.value > 0 ? 'up' : 'neutral',
+      fill: personTotal > 0 ? Math.min(100, (mappingCount.value / personTotal) * 100) : 0,
+      tint: 'linear-gradient(90deg, #ffd666, #845ef7)',
+      note: `人员设备绑定完成 ${mappingCount.value} 对`
+    },
+    {
+      title: '待处理告警',
+      value: totalAlerts.toString(),
+      unit: '条',
+      delta: totalAlerts === 0 ? '无告警' : totalAlerts > 10 ? '较多' : '正常',
+      trend: totalAlerts === 0 ? 'up' : 'down',
+      fill: Math.min(100, totalAlerts * 10),
+      tint: totalAlerts > 10 ? 'linear-gradient(90deg, #ff6b6b, #ff8787)' : 'linear-gradient(90deg, #ffd666, #ffa94d)',
+      note: `跌倒 ${fallAlerts.value.length} 条，生命体征 ${vitalsAlerts.value.length} 条`
+    }
+  ]
+})
+
+// 设备状态块
+const computedStatusBlocks = computed(() => {
+  const total = deviceStatistics.value.totalDevices || 0
+  const online = deviceStatistics.value.onlineDevices || 0
+  const offline = deviceStatistics.value.offlineDevices || 0
+  const personTotal = personStatistics.value.total || 0
+  const bindingRate = personTotal > 0 ? Math.round((mappingCount.value / personTotal) * 100) : 0
+  
+  return [
+    {
+      title: '在线设备',
+      value: online.toString(),
+      sub: `离线 ${offline} 台`,
+      background: 'linear-gradient(180deg, rgba(94, 233, 255, 0.32), rgba(132, 94, 247, 0.12))'
+    },
+    {
+      title: '监测人员',
+      value: personTotal.toString(),
+      sub: `已绑定 ${mappingCount.value} 人`,
+      background: 'linear-gradient(180deg, rgba(132, 94, 247, 0.22), rgba(255, 214, 102, 0.12))'
+    },
+    {
+      title: '绑定完成率',
+      value: `${bindingRate}%`,
+      sub: `活跃 ${mappingCount.value} 对`,
+      background: 'linear-gradient(180deg, rgba(255, 214, 102, 0.24), rgba(94, 233, 255, 0.14))'
+    }
+  ]
+})
+
+// 设备在线率
+const deviceOnlineRate = computed(() => {
+  const total = deviceStatistics.value.totalDevices || 0
+  const online = deviceStatistics.value.onlineDevices || 0
+  return total > 0 ? Math.round((online / total) * 100) : 0
+})
+
+// 设备型号统计
+const deviceModelStats = computed(() => {
+  const modelCount = {}
+  const total = deviceList.value.length
+  
+  deviceList.value.forEach(device => {
+    const type = device.modelType || '未知'
+    modelCount[type] = (modelCount[type] || 0) + 1
+  })
+  
+  return Object.entries(modelCount)
+    .map(([type, count]) => ({
+      type,
+      count,
+      percentage: total > 0 ? ((count / total) * 100).toFixed(1) : 0
+    }))
+    .sort((a, b) => b.count - a.count)
+})
+
+// 告警总数
+const totalActiveAlerts = computed(() => {
+  return fallAlerts.value.length + vitalsAlerts.value.length
+})
+
+// 最近告警列表
+const recentAlerts = computed(() => {
+  const alerts = []
+  
+  // 跌倒告警
+  fallAlerts.value.slice(0, 3).forEach(alert => {
+    alerts.push({
+      id: `fall-${alert.id}`,
+      type: '跌倒告警',
+      severity: alert.severity || 'WARNING',
+      title: `${alert.personName || '未知人员'} 检测到跌倒`,
+      detail: `${alert.location || '未知位置'} · ${formatTime(alert.fallDetectedAt)}`,
+      route: '/alert/fall',
+      rawData: alert
+    })
+  })
+  
+  // 生命体征告警
+  vitalsAlerts.value.slice(0, 3).forEach(alert => {
+    const typeMap = {
+      HEART_TACHY: '心动过速',
+      HEART_BRADY: '心动过缓',
+      HEART_FLATLINE: '心搏停止',
+      BREATH_TACHY: '呼吸过快',
+      BREATH_BRADY: '呼吸过缓',
+      APNEA: '呼吸暂停'
+    }
+    alerts.push({
+      id: `vital-${alert.id}`,
+      type: typeMap[alert.alertType] || '生命体征异常',
+      severity: alert.severity || 'WARNING',
+      title: `${alert.personName || '未知人员'} ${typeMap[alert.alertType] || '异常'}`,
+      detail: `${alert.location || '未知位置'} · ${formatTime(alert.detectedAt)}`,
+      route: '/alert/vitals',
+      rawData: alert
+    })
+  })
+  
+  // 按时间排序
+  return alerts.sort((a, b) => {
+    const timeA = a.rawData.fallDetectedAt || a.rawData.detectedAt
+    const timeB = b.rawData.fallDetectedAt || b.rawData.detectedAt
+    return new Date(timeB) - new Date(timeA)
+  })
+})
+
+// 今日告警数
+const todayAlertCount = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  const fallToday = fallAlerts.value.filter(alert => {
+    const alertDate = new Date(alert.fallDetectedAt)
+    return alertDate >= today
+  }).length
+  
+  const vitalToday = vitalsAlerts.value.filter(alert => {
+    const alertDate = new Date(alert.detectedAt)
+    return alertDate >= today
+  }).length
+  
+  return fallToday + vitalToday
+})
+
+// 跌倒告警统计
+const fallAlertStats = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  return {
+    today: fallAlerts.value.filter(alert => new Date(alert.fallDetectedAt) >= today).length,
+    total: fallAlerts.value.length
+  }
+})
+
+// 生命体征告警统计
+const vitalsAlertStats = computed(() => {
+  const heartTypes = ['HEART_TACHY', 'HEART_BRADY', 'HEART_FLATLINE']
+  const breathTypes = ['BREATH_TACHY', 'BREATH_BRADY', 'APNEA']
+  
+  return {
+    heart: vitalsAlerts.value.filter(alert => heartTypes.includes(alert.alertType)).length,
+    breath: vitalsAlerts.value.filter(alert => breathTypes.includes(alert.alertType)).length
+  }
+})
+
+// 心电异常统计
+const ecgAlertStats = computed(() => {
+  const stats = statsStore.ecgStats || {}
+  return {
+    total: (stats.tachycardia?.count || 0) + (stats.bradycardia?.count || 0) + (stats.arrhythmia?.count || 0),
+    tachycardia: stats.tachycardia?.count || 0,
+    bradycardia: stats.bradycardia?.count || 0,
+    arrhythmia: stats.arrhythmia?.count || 0
+  }
+})
+
+// 告警趋势
+const alertTrend = computed(() => {
+  // 简化计算：如果当前告警数多于5条，显示增加，否则显示减少
+  const current = todayAlertCount.value
+  if (current === 0) return -100
+  if (current > 10) return 50
+  if (current > 5) return 20
+  return -10
+})
+
+// 人员统计
+const personStats = computed(() => {
+  return {
+    total: personStatistics.value.total || 0,
+    male: personStatistics.value.male || 0,
+    female: personStatistics.value.female || 0
+  }
+})
+
+// Top 部门
+const topDepartments = computed(() => {
+  const depts = personStatistics.value.departments || {}
+  const total = personStatistics.value.total || 0
+  
+  return Object.entries(depts)
+    .map(([name, count]) => ({
+      name,
+      count,
+      percentage: total > 0 ? ((count / total) * 100).toFixed(1) : 0
+    }))
+    .sort((a, b) => b.count - a.count)
+})
+
+// 快捷操作
+const quickActions = computed(() => [
   {
-    title: '今日监测人数',
-    value: '1,248',
-    unit: '人',
-    delta: '+12.4% YoY',
-    trend: 'up',
-    fill: 78,
-    tint: 'linear-gradient(90deg, #845ef7, #5ee9ff)',
-    note: '较昨日提升，稳定覆盖主要人群。',
+    label: '人员管理',
+    note: '档案、分组与在岗状态',
+    route: '/person',
+    badge: personStats.value.total > 0 ? personStats.value.total : null
   },
   {
-    title: '在线设备数',
-    value: '132',
-    unit: '台',
-    delta: '+3.1%',
-    trend: 'up',
-    fill: 64,
-    tint: 'linear-gradient(90deg, #5ee9ff, #4dabf7)',
-    note: '在线率 91%，离线设备集中在南区机柜。',
+    label: '设备管理',
+    note: '在线/离线与维护',
+    route: '/device',
+    badge: deviceStatistics.value.offlineDevices > 0 ? `${deviceStatistics.value.offlineDevices} 离线` : null
   },
   {
-    title: '活跃绑定数',
-    value: '862',
-    unit: '对',
-    delta: '+1.6%',
-    trend: 'up',
-    fill: 54,
-    tint: 'linear-gradient(90deg, #ffd666, #845ef7)',
-    note: '人员与设备绑定保持平稳，新增 18 对。',
+    label: '人员雷达绑定',
+    note: '绑定校验与同步',
+    route: '/mapping',
+    badge: mappingCount.value > 0 ? mappingCount.value : null
   },
   {
-    title: '未处理告警',
-    value: '7',
-    unit: '条',
-    delta: '-9.0%',
-    trend: 'down',
-    fill: 32,
-    tint: 'linear-gradient(90deg, #ff6b6b, #ffd666)',
-    note: '大部分为中低等级，持续跟进中。',
+    label: '实时监测',
+    note: '最新检测与刷新',
+    route: '/realtime/vital'
   },
-];
+  {
+    label: '历史数据',
+    note: '趋势分析与导出',
+    route: '/historical/vital'
+  },
+  {
+    label: '告警处理',
+    note: '等级筛选与闭环',
+    route: '/alert/fall',
+    badge: totalActiveAlerts.value > 0 ? totalActiveAlerts.value : null
+  }
+])
 
-const sparkline = [32, 24, 40, 26, 48, 34, 52, 30, 44, 28, 38, 46];
+// ==================== 方法 ====================
 
-const snapshots = [
-  { title: '心率 76 bpm · 血氧 98%', detail: '实时监测 - 北区工位 12', time: '09:30:12' },
-  { title: '体表温度 36.6 ℃', detail: '设备 #A13 自动巡检', time: '09:29:50' },
-  { title: '人员绑定同步', detail: '新增 3 人完成绑定校验', time: '09:27:18' },
-];
+// 格式化时间
+function formatTime(dateString) {
+  if (!dateString) return '--:--'
+  const date = new Date(dateString)
+  const now = new Date()
+  const diff = now - date
+  const minutes = Math.floor(diff / 60000)
+  
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  if (minutes < 1440) return `${Math.floor(minutes / 60)}小时前`
+  return date.toLocaleString('zh-CN', { 
+    month: '2-digit', 
+    day: '2-digit', 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  })
+}
 
-const statusBlocks = [
-  { title: '在线设备', value: '132', sub: '离线 12 台', background: 'linear-gradient(180deg, rgba(94, 233, 255, 0.32), rgba(132, 94, 247, 0.12))' },
-  { title: '在岗人员', value: '842', sub: '离岗 38 人', background: 'linear-gradient(180deg, rgba(132, 94, 247, 0.22), rgba(255, 214, 102, 0.12))' },
-  { title: '绑定完成率', value: '93%', sub: '今日新增 18 对', background: 'linear-gradient(180deg, rgba(255, 214, 102, 0.24), rgba(94, 233, 255, 0.14))' },
-];
+// 更新当前时间
+function updateCurrentTime() {
+  const now = new Date()
+  lastUpdateTime.value = now.toLocaleTimeString('zh-CN', { hour12: false })
+}
 
-const topList = [
-  { name: '设备 #302 心率异常', note: '自动降级为关注，待复核', tag: '待处理', type: 'alert' },
-  { name: '人员 李晓 · 北区', note: '连续 3 次正常心率', tag: '稳定', type: 'info' },
-  { name: '设备 #A13 维护完成', note: '已恢复在线监测', tag: '在线', type: 'info' },
-  { name: '人员绑定同步完成', note: '3 人待确认', tag: '同步', type: 'info' },
-  { name: '设备 #219 离线', note: '南区机柜网络波动', tag: '关注', type: 'alert' },
-];
+// 加载设备数据
+async function loadDeviceData() {
+  try {
+    await deviceStore.fetchDevices({ page: 1, size: 1000 })
+    deviceList.value = deviceStore.deviceList || []
+    
+    // 统计设备状态
+    const stats = {
+      totalDevices: deviceList.value.length,
+      onlineDevices: 0,
+      offlineDevices: 0,
+      maintenanceDevices: 0
+    }
+    
+    deviceList.value.forEach(device => {
+      if (device.status === 'ONLINE') stats.onlineDevices++
+      else if (device.status === 'OFFLINE') stats.offlineDevices++
+      else if (device.status === 'MAINTENANCE') stats.maintenanceDevices++
+    })
+    
+    deviceStatistics.value = stats
+  } catch (error) {
+    console.warn('加载设备数据失败:', error)
+  }
+}
 
-const hours = ['00', '04', '08', '12', '16', '20', '24'];
+// 加载人员数据
+async function loadPersonData() {
+  try {
+    await personStore.fetchPersons()
+    personList.value = personStore.personList || []
+    
+    // 统计人员信息
+    const stats = {
+      total: personList.value.length,
+      male: 0,
+      female: 0,
+      departments: {}
+    }
+    
+    personList.value.forEach(person => {
+      if (person.gender === 'Male') stats.male++
+      else if (person.gender === 'Female') stats.female++
+      
+      const dept = person.department || '未分配'
+      stats.departments[dept] = (stats.departments[dept] || 0) + 1
+    })
+    
+    personStatistics.value = stats
+  } catch (error) {
+    console.warn('加载人员数据失败:', error)
+  }
+}
 
-const alerts = [
-  { level: '高', source: '设备 #302 心率异常', time: '09:24 · 来自实时监测' },
-  { level: '中', source: '人员 张伟 绑定校验未通过', time: '09:12 · 来自绑定中心' },
-  { level: '中', source: '设备 #219 离线超过 30 分钟', time: '08:58 · 来自设备监控' },
-  { level: '低', source: '北区工位温度偏高', time: '08:40 · 来自环境巡检' },
-];
+// 加载绑定数据
+async function loadMappingData() {
+  try {
+    const response = await getPersonDeviceMappings({ page: 0, size: 1000 })
+    const mappings = response.data?.content || response.data || []
+    mappingCount.value = mappings.length
+  } catch (error) {
+    console.warn('加载绑定数据失败:', error)
+    mappingCount.value = 0
+  }
+}
 
-const quickActions = [
-  { label: '人员管理', note: '档案、分组与在岗状态' },
-  { label: '设备管理', note: '在线/离线与维护' },
-  { label: '人员雷达绑定', note: '绑定校验与同步' },
-  { label: '实时监测', note: '最新检测与刷新' },
-  { label: '历史数据', note: '趋势分析与导出' },
-  { label: '告警处理', note: '等级筛选与闭环' },
-];
+// 加载告警数据
+async function loadAlertData() {
+  try {
+    // 加载跌倒告警
+    await alertStore.fetchActiveFallAlerts()
+    fallAlerts.value = alertStore.activeFallAlerts || []
+    
+    // 加载生命体征告警
+    await alertStore.fetchRecentVitalsAlerts()
+    vitalsAlerts.value = alertStore.recentVitalsAlerts || []
+  } catch (error) {
+    console.warn('加载告警数据失败:', error)
+  }
+}
 
-const lastUpdated = '09:30:12';
+// 加载所有数据
+async function loadDashboardData() {
+  try {
+    await Promise.all([
+      loadDeviceData(),
+      loadPersonData(),
+      loadMappingData(),
+      loadAlertData()
+    ])
+    updateCurrentTime()
+  } catch (error) {
+    console.error('加载概览数据失败:', error)
+    ElMessage.error('加载数据失败，请稍后重试')
+  }
+}
+
+// 刷新所有数据
+async function handleRefreshAll() {
+  if (refreshing.value) return
+  
+  refreshing.value = true
+  try {
+    await loadDashboardData()
+    ElMessage.success('数据刷新成功')
+  } catch (error) {
+    ElMessage.error('刷新失败')
+  } finally {
+    refreshing.value = false
+  }
+}
+
+// 刷新告警数据
+async function handleRefreshAlerts() {
+  try {
+    await loadAlertData()
+    ElMessage.success('告警数据已更新')
+  } catch (error) {
+    ElMessage.error('刷新告警失败')
+  }
+}
+
+// 切换自动刷新
+function toggleAutoRefresh() {
+  autoRefresh.value = !autoRefresh.value
+  
+  if (autoRefresh.value) {
+    startAutoRefresh()
+    ElMessage.success('已开启自动刷新（30秒）')
+  } else {
+    stopAutoRefresh()
+    ElMessage.info('已暂停自动刷新')
+  }
+}
+
+// 开启自动刷新
+function startAutoRefresh() {
+  if (refreshTimer.value) return
+  
+  refreshTimer.value = setInterval(async () => {
+    console.log('自动刷新数据...')
+    await loadAlertData()
+    await loadDeviceData()
+    updateCurrentTime()
+  }, 30000) // 30秒刷新一次
+}
+
+// 停止自动刷新
+function stopAutoRefresh() {
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value)
+    refreshTimer.value = null
+  }
+}
+
+// 跳转到告警处理
+function handleGoToAlert(alert) {
+  router.push(alert.route)
+}
+
+// 快捷操作
+function handleQuickAction(action) {
+  if (action.route) {
+    router.push(action.route)
+  }
+}
+
+// ==================== 生命周期 ====================
+
+onMounted(async () => {
+  initialLoading.value = true
+  
+  try {
+    await loadDashboardData()
+    if (autoRefresh.value) {
+      startAutoRefresh()
+    }
+  } catch (error) {
+    console.error('初始化失败:', error)
+  } finally {
+    initialLoading.value = false
+  }
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
+})
 </script>
 
 <style scoped>
@@ -237,6 +771,7 @@ const lastUpdated = '09:30:12';
   display: flex;
   flex-direction: column;
   gap: 18px;
+  padding-bottom: 24px;
 }
 
 .hero {
@@ -247,6 +782,17 @@ const lastUpdated = '09:30:12';
   overflow: hidden;
   color: var(--text-strong);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 10px;
+  z-index: 1;
 }
 
 .eyebrow {
@@ -267,7 +813,7 @@ h3 {
 }
 
 .lede {
-  margin: 0;
+  margin: 0 0 12px;
   color: var(--text-soft);
   max-width: 960px;
   line-height: 1.6;
@@ -287,9 +833,24 @@ h3 {
   border: 1px solid rgba(255, 255, 255, 0.6);
   color: var(--text-strong);
   font-weight: 600;
+  font-size: 13px;
+}
+
+.chip-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .chip-button {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -312,6 +873,18 @@ h3 {
   text-align: left;
 }
 
+.action-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #ff6b6b;
+  color: white;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
 .glow {
   position: absolute;
   right: -40px;
@@ -320,6 +893,7 @@ h3 {
   height: 280px;
   background: radial-gradient(circle, rgba(94, 233, 255, 0.35), rgba(132, 94, 247, 0.15), transparent 65%);
   filter: blur(8px);
+  pointer-events: none;
 }
 
 .grid {
@@ -344,6 +918,7 @@ h3 {
 
 .card h3 {
   margin: 0;
+  font-size: 16px;
 }
 
 .card p {
@@ -390,6 +965,7 @@ h3 {
 .meter-fill {
   height: 100%;
   border-radius: 99px;
+  transition: width 0.3s ease;
 }
 
 .meta {
@@ -447,18 +1023,20 @@ h3 {
   gap: 10px;
 }
 
-.sparkline {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  gap: 6px;
-  height: 120px;
-  align-items: end;
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-soft);
 }
 
-.sparkline .bar {
-  background: linear-gradient(180deg, rgba(132, 94, 247, 0.4), rgba(94, 233, 255, 0.65));
-  border-radius: 8px 8px 4px 4px;
-  box-shadow: 0 6px 16px rgba(94, 233, 255, 0.18);
+.alert-row {
+  padding: 10px;
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.alert-row:hover {
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .list {
@@ -481,6 +1059,7 @@ h3 {
 .strong {
   color: var(--text-strong);
   margin: 0 0 2px;
+  font-weight: 600;
 }
 
 .muted {
@@ -493,12 +1072,19 @@ h3 {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  margin-top: auto;
 }
 
 button {
   border: none;
   cursor: pointer;
   font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 button.primary {
@@ -509,6 +1095,11 @@ button.primary {
   box-shadow: 0 10px 30px rgba(132, 94, 247, 0.25);
 }
 
+button.primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 35px rgba(132, 94, 247, 0.3);
+}
+
 button.ghost {
   background: rgba(0, 0, 0, 0.04);
   color: var(--text-strong);
@@ -516,9 +1107,19 @@ button.ghost {
   border-radius: 12px;
 }
 
+button.ghost:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
 button.link {
   background: transparent;
   color: #5b8def;
+  padding: 4px 8px;
+}
+
+button.link:hover {
+  color: #4a7bd6;
+  text-decoration: underline;
 }
 
 .status {
@@ -545,34 +1146,98 @@ button.link {
   color: var(--text-strong);
 }
 
-.chart .trend {
+.chart {
+  gap: 16px;
+}
+
+.alert-type-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 12px;
+}
+
+.stat-item {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
+  align-items: center;
 }
 
-.trend-area {
-  height: 180px;
-  border-radius: 14px;
-  background: linear-gradient(180deg, rgba(132, 94, 247, 0.28), rgba(94, 233, 255, 0.18));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  position: relative;
-  overflow: hidden;
-}
-
-.trend-area::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.4), transparent 35%),
-    radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.35), transparent 45%);
-}
-
-.trend-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  color: var(--text-soft);
+.stat-label {
   font-size: 12px;
+  color: var(--text-soft);
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.stat-value.critical {
+  color: #ff6b6b;
+}
+
+.stat-value.warning {
+  color: #ffa94d;
+}
+
+.stat-value.info {
+  color: #5b8def;
+}
+
+.trend-summary {
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.text-danger {
+  color: #ff6b6b;
+  font-weight: 600;
+}
+
+.text-success {
+  color: #51cf66;
+  font-weight: 600;
+}
+
+.person-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+.person-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 12px;
+}
+
+.stat-icon {
+  font-size: 32px;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-number {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.stat-text {
+  font-size: 12px;
+  color: var(--text-soft);
 }
 
 .alert-body {
@@ -586,6 +1251,10 @@ button.link {
 }
 
 @media (max-width: 640px) {
+  .hero {
+    flex-direction: column;
+  }
+  
   .section-head {
     align-items: flex-start;
     flex-direction: column;
@@ -593,6 +1262,10 @@ button.link {
 
   .list-row {
     align-items: flex-start;
+  }
+  
+  .alert-type-stats {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 </style>

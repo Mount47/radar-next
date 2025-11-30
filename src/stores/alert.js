@@ -184,6 +184,20 @@ export const useAlertStore = defineStore('alert', () => {
     }
   }
   
+  // 获取最近的生命体征异常（用于概览页面）
+  async function fetchRecentVitalsAlerts() {
+    try {
+      const response = await getVitalsAlerts({ limit: 50 })
+      const alerts = response.data || []
+      recentVitalsAlerts.value = alerts
+      return alerts
+    } catch (error) {
+      console.warn('⚠️ 获取最近生命体征异常失败（可能后端接口未实现）:', error.message)
+      recentVitalsAlerts.value = []
+      return []
+    }
+  }
+  
   // ==================== WebSocket 实时推送处理 ====================
   
   // 处理跌倒警报推送
@@ -334,6 +348,7 @@ export const useAlertStore = defineStore('alert', () => {
     
     // 生命体征异常操作
     fetchVitalsAlerts,
+    fetchRecentVitalsAlerts,
     
     // WebSocket 推送处理
     handleFallAlertPush,
