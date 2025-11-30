@@ -49,7 +49,8 @@
           <el-button size="small" @click="refreshData">刷新数据</el-button>
         </div>
         <el-table v-loading="loading" :data="pagedPersons" stripe border style="width: 100%"
-          @selection-change="handleSelectionChange">
+          @selection-change="handleSelectionChange"
+          @row-click="setActivePerson">
           <el-table-column type="selection" width="45" />
           <el-table-column prop="personId" label="工号" width="110" />
           <el-table-column prop="personName" label="姓名" width="140" />
@@ -105,10 +106,10 @@
               <p class="label">创建时间</p>
               <p class="value">{{ formatDate(selectedPerson.createdAt) || '暂无' }}</p>
             </div>
-            <div>
+            <!-- <div>
               <p class="label">备注</p>
               <p class="value">关联设备、标签和最近动态可在绑定与实时监测中查看。</p>
-            </div>
+            </div> -->
           </div>
         </div>
         <div v-else class="empty-profile">
@@ -556,6 +557,10 @@ export default {
       this.selectedPerson = val[0] || this.selectedPerson
     },
 
+    setActivePerson(row) {
+      this.selectedPerson = row
+    },
+
     // 显示新增对话框
     showAddDialog() {
       this.isEdit = false
@@ -606,29 +611,56 @@ export default {
     },
 
     // 删除人员
-    deletePerson(person) {
-      ElMessageBox.confirm(`确定删除 ${person.personName} 吗？`, '提示', {
-        type: 'warning'
-      }).then(async () => {
+    async deletePerson(person) {
+      if (!person) return
+      try {
+        await ElMessageBox.confirm(
+          `确定删除人员 "${person.personName || person.personId}" 吗？此操作不可撤销。`,
+          '删除确认',
+          {
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        )
         await deletePersonAPI(person.personId)
-        ElMessage.success('删除成功')
+        ElMessage.success('人员已删除')
         this.fetchPersons()
-      }).catch(() => { })
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('删除人员失败:', error)
+          ElMessage.error('删除失败，人员可能存在绑定关系')
+        }
+      }
     },
 
     // 批量删除
-    batchDelete() {
-      if (this.selectedPersons.length === 0) {
+    async batchDelete() {
+      if (!this.selectedPersons.length) {
+        ElMessage.warning('请先选择人员')
         return
       }
-      ElMessageBox.confirm(`确定删除选中的 ${this.selectedPersons.length} 个人员吗？`, '提示', {
-        type: 'warning'
-      }).then(async () => {
+      const personNames = this.selectedPersons.map(p => p.personName || p.personId).join('、')
+      try {
+        await ElMessageBox.confirm(
+          `确认删除以下人员？\n${personNames}`,
+          '批量删除确认',
+          {
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+            type: 'error'
+          }
+        )
         const personIds = this.selectedPersons.map(p => p.personId)
         await batchDeletePersons(personIds)
-        ElMessage.success('批量删除成功')
+        ElMessage.success(`已删除 ${this.selectedPersons.length} 个人员`)
         this.fetchPersons()
-      }).catch(() => { })
+      } catch (error) {
+        if (error !== 'cancel') {
+          console.error('批量删除失败:', error)
+          ElMessage.error('批量删除失败')
+        }
+      }
     },
 
     // 显示详情

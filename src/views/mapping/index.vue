@@ -1145,25 +1145,29 @@ export default {
 
     // 删除映射
     async deleteMappingItem(mapping) {
+      if (!mapping) return
       try {
-        // await this.$confirm('确定要删除此映射关系吗？删除后无法恢复！', '确认删除', {
-        //   confirmButtonText: '确定',
-        //   cancelButtonText: '取消',
-        //   type: 'warning'
-        // })
+        await ElMessageBox.confirm(
+          `确定删除映射关系 "${mapping.personName || mapping.personId} → ${mapping.deviceName || mapping.deviceId}" 吗？此操作不可撤销。`,
+          '删除确认',
+          {
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+        )
 
         const result = await deletePersonDeviceMapping(mapping.id)
         console.log('删除映射结果:', result)
 
-        // this.$message.success('删除成功')
+        ElMessage.success('映射关系已删除')
         // 刷新数据
         await this.fetchMappings()
       } catch (error) {
         if (error !== 'cancel') {
           console.error('删除映射失败:', error)
-          // 检查是否是网络错误或其他技术错误
           const errorMessage = error.message || '删除失败'
-          // this.$message.error(errorMessage)
+          ElMessage.error(errorMessage)
         }
       }
     },
@@ -1291,26 +1295,34 @@ export default {
     // 批量删除映射
     async batchDeleteMappings() {
       try {
-        if (this.selectedMappings.length === 0) {
-          // this.$message.warning('请选择需要删除的映射关系')
+        if (!this.selectedMappings.length) {
+          ElMessage.warning('请先选择映射关系')
           return
         }
 
-        // await this.$confirm(`确定要删除选中的 ${this.selectedMappings.length} 个映射关系吗？删除后无法恢复！`, '确认删除', {
-        //   confirmButtonText: '确定',
-        //   cancelButtonText: '取消',
-        //   type: 'warning'
-        // })
+        const mappingNames = this.selectedMappings
+          .map(m => `${m.personName || m.personId} → ${m.deviceName || m.deviceId}`)
+          .join('\n')
+        
+        await ElMessageBox.confirm(
+          `确认删除以下映射关系？\n${mappingNames}`,
+          '批量删除确认',
+          {
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+            type: 'error'
+          }
+        )
 
         const mappingIds = this.selectedMappings.map(m => m.id)
         await batchDeletePersonDeviceMappings(mappingIds)
 
-        // this.$message.success(`成功删除 ${this.selectedMappings.length} 个映射关系`)
+        ElMessage.success(`已删除 ${this.selectedMappings.length} 个映射关系`)
         this.fetchMappings()
       } catch (error) {
         if (error !== 'cancel') {
           console.error('批量删除失败:', error)
-          // this.$message.error('批量删除失败')
+          ElMessage.error('批量删除失败')
         }
       }
     },
