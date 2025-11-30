@@ -42,112 +42,165 @@
       <!-- 左侧：3D可视化 -->
       <div class="main-panel">
         <!-- 3D点云图 -->
-        <div class="chart-card">
+        <div class="visualization-card">
           <div class="card-header">
-            <h3>3D图像点云</h3>
+            <h3>3D实时监测</h3>
             <div class="view-controls">
-              <el-dropdown trigger="click">
-                <el-button size="small">
-                  显示选项 <el-icon><ArrowDown /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="setViewMode('both')">
-                      <el-icon><View /></el-icon> 全部显示
-                    </el-dropdown-item>
-                    <el-dropdown-item @click="setViewMode('pointclouds')">
-                      <el-icon><Grid /></el-icon> 仅点云
-                    </el-dropdown-item>
-                    <el-dropdown-item @click="setViewMode('keypoints')">
-                      <el-icon><LocationFilled /></el-icon> 仅关键点
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+              <el-radio-group v-model="viewMode" size="small">
+                <el-radio-button v-for="mode in viewModes" :key="mode.value" :label="mode.value">
+                  {{ mode.label }}
+                </el-radio-button>
+              </el-radio-group>
             </div>
           </div>
-          <div ref="trajectoryContainer" class="visualization-container"></div>
-          <div class="visualization-tip">
-            <!-- 提示: 鼠标拖动旋转视角，滚轮缩放，右键平移 -->
-          </div>
+          <div class="visualization-container" ref="threeContainer"></div>
         </div>
 
         <!-- 位姿状态卡片 -->
         <div class="posture-status-card">
           <div class="status-header">
             <h3>人体位姿状态</h3>
-            <el-button size="small" type="primary" :icon="isMonitoring ? 'VideoPause' : 'VideoPlay'">
+            <el-tag :type="getMonitoringStatusType(monitoringStatus)" size="large">
               {{ monitoringStatus }}
-            </el-button>
+            </el-tag>
           </div>
           
-          <div class="posture-display">
-            <div class="posture-icon-large">
-              <div v-if="postureStatus === 'sitting'" class="icon-sitting">
-                <svg viewBox="0 0 100 100" fill="currentColor">
-                  <circle cx="50" cy="20" r="10"/>
-                  <rect x="45" y="30" width="10" height="25" rx="5"/>
-                  <rect x="35" y="35" width="15" height="8" rx="4" transform="rotate(-45 42.5 39)"/>
-                  <rect x="50" y="35" width="15" height="8" rx="4" transform="rotate(45 57.5 39)"/>
-                  <rect x="40" y="55" width="20" height="10" rx="5"/>
-                  <rect x="38" y="65" width="8" height="20" rx="4"/>
-                  <rect x="54" y="65" width="8" height="20" rx="4"/>
-                </svg>
-              </div>
-              <div v-else-if="postureStatus === 'standing'" class="icon-standing">
-                <svg viewBox="0 0 100 100" fill="currentColor">
-                  <circle cx="50" cy="15" r="10"/>
-                  <rect x="45" y="25" width="10" height="35" rx="5"/>
-                  <rect x="35" y="30" width="15" height="8" rx="4" transform="rotate(-20 42.5 34)"/>
-                  <rect x="50" y="30" width="15" height="8" rx="4" transform="rotate(20 57.5 34)"/>
-                  <rect x="43" y="60" width="7" height="30" rx="3.5"/>
-                  <rect x="50" y="60" width="7" height="30" rx="3.5"/>
-                </svg>
-              </div>
-              <div v-else-if="postureStatus === 'walking'" class="icon-walking">
-                <svg viewBox="0 0 100 100" fill="currentColor">
-                  <circle cx="50" cy="15" r="10"/>
-                  <rect x="45" y="25" width="10" height="30" rx="5" transform="rotate(5 50 40)"/>
-                  <rect x="33" y="28" width="15" height="8" rx="4" transform="rotate(-30 40.5 32)"/>
-                  <rect x="52" y="32" width="15" height="8" rx="4" transform="rotate(40 59.5 36)"/>
-                  <rect x="40" y="55" width="8" height="28" rx="4" transform="rotate(20 44 69)"/>
-                  <rect x="48" y="55" width="8" height="28" rx="4" transform="rotate(-15 52 69)"/>
-                </svg>
-              </div>
-              <div v-else-if="postureStatus === 'fall'" class="icon-fall">
-                <svg viewBox="0 0 100 100" fill="currentColor">
-                  <circle cx="30" cy="50" r="10"/>
-                  <rect x="40" y="45" width="35" height="10" rx="5"/>
-                  <rect x="40" y="40" width="8" height="15" rx="4" transform="rotate(-45 44 47.5)"/>
-                  <rect x="67" y="40" width="8" height="15" rx="4" transform="rotate(45 71 47.5)"/>
-                  <rect x="55" y="55" width="10" height="20" rx="5" transform="rotate(30 60 65)"/>
-                  <rect x="65" y="55" width="10" height="20" rx="5" transform="rotate(-10 70 65)"/>
-                </svg>
-              </div>
-              <div v-else class="icon-unknown">
-                <el-icon><QuestionFilled /></el-icon>
+          <!-- 当前状态展示区 -->
+          <div class="current-posture-section">
+            <div class="posture-icon-container">
+              <div class="posture-icon-large">
+                <div v-if="postureStatus === 'sitting'" class="icon-sitting">
+                  <svg viewBox="0 0 100 100" fill="currentColor">
+                    <circle cx="50" cy="20" r="10"/>
+                    <rect x="45" y="30" width="10" height="25" rx="5"/>
+                    <rect x="35" y="35" width="15" height="8" rx="4" transform="rotate(-45 42.5 39)"/>
+                    <rect x="50" y="35" width="15" height="8" rx="4" transform="rotate(45 57.5 39)"/>
+                    <rect x="40" y="55" width="20" height="10" rx="5"/>
+                    <rect x="38" y="65" width="8" height="20" rx="4"/>
+                    <rect x="54" y="65" width="8" height="20" rx="4"/>
+                  </svg>
+                </div>
+                <div v-else-if="postureStatus === 'standing'" class="icon-standing">
+                  <svg viewBox="0 0 100 100" fill="currentColor">
+                    <circle cx="50" cy="15" r="10"/>
+                    <rect x="45" y="25" width="10" height="35" rx="5"/>
+                    <rect x="35" y="30" width="15" height="8" rx="4" transform="rotate(-20 42.5 34)"/>
+                    <rect x="50" y="30" width="15" height="8" rx="4" transform="rotate(20 57.5 34)"/>
+                    <rect x="43" y="60" width="7" height="30" rx="3.5"/>
+                    <rect x="50" y="60" width="7" height="30" rx="3.5"/>
+                  </svg>
+                </div>
+                <div v-else-if="postureStatus === 'walking'" class="icon-walking">
+                  <svg viewBox="0 0 100 100" fill="currentColor">
+                    <circle cx="50" cy="15" r="10"/>
+                    <rect x="45" y="25" width="10" height="30" rx="5" transform="rotate(5 50 40)"/>
+                    <rect x="33" y="28" width="15" height="8" rx="4" transform="rotate(-30 40.5 32)"/>
+                    <rect x="52" y="32" width="15" height="8" rx="4" transform="rotate(40 59.5 36)"/>
+                    <rect x="40" y="55" width="8" height="28" rx="4" transform="rotate(20 44 69)"/>
+                    <rect x="48" y="55" width="8" height="28" rx="4" transform="rotate(-15 52 69)"/>
+                  </svg>
+                </div>
+                <div v-else-if="postureStatus === 'raising_hand'" class="icon-raising-hand">
+                  <svg viewBox="0 0 100 100" fill="currentColor">
+                    <circle cx="50" cy="15" r="10"/>
+                    <rect x="45" y="25" width="10" height="35" rx="5"/>
+                    <rect x="35" y="30" width="15" height="8" rx="4" transform="rotate(-70 42.5 34)"/>
+                    <rect x="50" y="30" width="15" height="8" rx="4" transform="rotate(20 57.5 34)"/>
+                    <rect x="43" y="60" width="7" height="30" rx="3.5"/>
+                    <rect x="50" y="60" width="7" height="30" rx="3.5"/>
+                  </svg>
+                </div>
+                <div v-else-if="postureStatus === 'fall'" class="icon-fall">
+                  <svg viewBox="0 0 100 100" fill="currentColor">
+                    <circle cx="30" cy="50" r="10"/>
+                    <rect x="40" y="45" width="35" height="10" rx="5"/>
+                    <rect x="40" y="40" width="8" height="15" rx="4" transform="rotate(-45 44 47.5)"/>
+                    <rect x="67" y="40" width="8" height="15" rx="4" transform="rotate(45 71 47.5)"/>
+                    <rect x="55" y="55" width="10" height="20" rx="5" transform="rotate(30 60 65)"/>
+                    <rect x="65" y="55" width="10" height="20" rx="5" transform="rotate(-10 70 65)"/>
+                  </svg>
+                </div>
+                <div v-else class="icon-unknown">
+                  <el-icon><QuestionFilled /></el-icon>
+                </div>
               </div>
             </div>
             
-            <div class="posture-info">
-              <div class="current-state">
-                <span class="state-label">当前状态:</span>
-                <span class="state-value" :class="'state-' + postureStatus">
+            <div class="posture-details">
+              <div class="current-state-label">
+                <span class="label-text">当前状态</span>
+              </div>
+              <div class="current-state-value">
+                <span :class="['state-text', 'state-' + postureStatus]">
                   {{ getPostureText(postureStatus) }}
                 </span>
               </div>
-              <div class="state-icons">
-                <div class="state-item" :class="{ active: postureStatus === 'walking' }">
-                  <span class="state-icon">🚶</span>
-                  <span class="state-name">行走</span>
+              <div class="state-duration">
+                <el-icon class="duration-icon"><Timer /></el-icon>
+                <span class="duration-text">持续时长: {{ formatDuration(currentStateDuration) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 状态历史时间轴 -->
+          <div class="posture-timeline-section">
+            <div class="timeline-header">
+              <span class="timeline-title">状态历史时间轴</span>
+              <span class="timeline-subtitle">（最近{{ postureHistoryTimeWindow / 60000 }}分钟）</span>
+            </div>
+            
+            <div class="timeline-container" v-if="postureHistory.length > 0">
+              <div class="timeline-track">
+                <div 
+                  v-for="(item, index) in displayPostureHistory" 
+                  :key="index"
+                  class="timeline-item"
+                  :class="'timeline-' + item.status"
+                  :style="{ width: item.widthPercent + '%' }"
+                  :title="`${getPostureText(item.status)} - ${formatDuration(item.duration)}`"
+                >
+                  <div class="timeline-content">
+                    <span class="timeline-emoji">{{ getPostureEmoji(item.status) }}</span>
+                    <span class="timeline-duration">{{ formatShortDuration(item.duration) }}</span>
+                  </div>
                 </div>
-                <div class="state-item" :class="{ active: postureStatus === 'fall' }">
-                  <span class="state-icon">🤾</span>
-                  <span class="state-name">跌倒</span>
+              </div>
+              
+              <div class="timeline-legend">
+                <div 
+                  v-for="(item, index) in displayPostureHistory" 
+                  :key="'legend-' + index"
+                  class="legend-item"
+                >
+                  <span class="legend-emoji">{{ getPostureEmoji(item.status) }}</span>
+                  <span class="legend-text">{{ getPostureText(item.status) }}</span>
+                  <el-icon class="legend-arrow" v-if="index < displayPostureHistory.length - 1"><Right /></el-icon>
                 </div>
-                <div class="state-item" :class="{ active: postureStatus === 'standing' }">
-                  <span class="state-icon">🧍</span>
-                  <span class="state-name">站立</span>
+              </div>
+            </div>
+            
+            <div class="timeline-empty" v-else>
+              <el-icon class="empty-icon"><Clock /></el-icon>
+              <span class="empty-text">暂无历史记录，开始监测后将显示状态变化</span>
+            </div>
+          </div>
+
+          <!-- 全部状态卡片 -->
+          <div class="all-states-section">
+            <div class="states-grid">
+              <div 
+                v-for="state in allPostureStates" 
+                :key="state.value"
+                class="state-card"
+                :class="{ 
+                  'state-active': postureStatus === state.value,
+                  ['state-card-' + state.value]: true
+                }"
+              >
+                <div class="state-card-icon">{{ state.emoji }}</div>
+                <div class="state-card-name">{{ state.name }}</div>
+                <div class="state-card-count" v-if="getStateCount(state.value) > 0">
+                  今日 {{ getStateCount(state.value) }} 次
                 </div>
               </div>
             </div>
@@ -364,6 +417,8 @@ import {
   sendTI6843PostureHeartbeat,
   formatPostureDataForDisplay
 } from '@/api/sensors/ti6843-posture'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 // 导入跌倒警报API
 import {
   getActiveFallAlerts,
@@ -376,22 +431,22 @@ import {
   markFallAlertAsFalseAlarm,
   ALERT_STATUS_MAP
 } from '@/api/alerts/fall-alert'
-import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import DevicePersonSelector from '@/components/DevicePersonSelector.vue'
 import { 
-  VideoPlay, VideoPause, Clock, Refresh, ArrowDown, View, Grid, LocationFilled,
+  VideoPlay, VideoPause, Clock, Refresh, ArrowDown, View, Grid, LocationFilled, Location,
   Warning, User, InfoFilled, Close, More, Cpu, Monitor, Setting, 
-  CircleCheck, Coordinate, QuestionFilled, WarningFilled, ArrowRight, CircleCheckFilled
+  CircleCheck, Coordinate, QuestionFilled, WarningFilled, ArrowRight, CircleCheckFilled,
+  Timer, Right
 } from '@element-plus/icons-vue'
 
 export default {
   name: 'PostureMonitor',
   components: {
     DevicePersonSelector,
-    VideoPlay, VideoPause, Clock, Refresh, ArrowDown, View, Grid, LocationFilled,
+    VideoPlay, VideoPause, Clock, Refresh, ArrowDown, View, Grid, LocationFilled, Location,
     Warning, User, InfoFilled, Close, More, Cpu, Monitor, Setting, 
-    CircleCheck, Coordinate, QuestionFilled, WarningFilled, ArrowRight, CircleCheckFilled
+    CircleCheck, Coordinate, QuestionFilled, WarningFilled, ArrowRight, CircleCheckFilled,
+    Timer, Right
   },
   data() {
     return {
@@ -413,6 +468,17 @@ export default {
       mappingInfo: {
         name: this.$route.query.mappingName || '默认映射'
       },
+
+      // 3D Visualization
+      viewMode: 'all', // 'all', 'pointcloud', 'keypoints', 'trajectory'
+      viewModes: [
+        { label: '全部显示', value: 'all' },
+        { label: '点云', value: 'pointcloud' },
+        { label: '关键点', value: 'keypoints' },
+        { label: '运动轨迹', value: 'trajectory' }
+      ],
+      trajectoryPoints: [], // Array of { position: Vector3, timestamp: number }
+      trajectoryDuration: 5000, // 5 seconds
       
       // 位姿状态和数据
       postureStatus: 'standing', // 默认为站立状态
@@ -422,9 +488,38 @@ export default {
         'lying': 'lying',
         'walking': 'walking',
         'fall': 'fall',
-        'fallen': 'fall' // 添加fallen状态映射
+        'fallen': 'fall', // 添加fallen状态映射
+        'raising_hand': 'raising_hand'
       },
       currentPostureData: null, // 当前位姿数据
+      
+      // 状态持续时长跟踪
+      currentStateDuration: 0, // 当前状态持续时长（毫秒）
+      currentStateStartTime: null, // 当前状态开始时间
+      durationTimer: null, // 持续时长计时器
+      
+      // 状态历史记录
+      postureHistory: [], // 状态历史数组 [{status, startTime, endTime, duration}]
+      postureHistoryTimeWindow: 600000, // 历史记录时间窗口：10分钟
+      maxHistoryRecords: 50, // 最大历史记录数
+      
+      // 今日状态统计
+      todayStateCount: {
+        walking: 0,
+        sitting: 0,
+        standing: 0,
+        raising_hand: 0,
+        fall: 0
+      },
+      
+      // 所有状态定义
+      allPostureStates: [
+        { value: 'walking', name: '行走', emoji: '🚶' },
+        { value: 'sitting', name: '坐着', emoji: '🪑' },
+        { value: 'standing', name: '站立', emoji: '🧍' },
+        { value: 'raising_hand', name: '举手', emoji: '🙋' },
+        { value: 'fall', name: '跌倒', emoji: '🤾' }
+      ],
       
       // 跌倒警报相关
       fallAlertWs: null, // 跌倒警报WebSocket连接
@@ -462,54 +557,224 @@ export default {
       lastUpdateTime: null,
       currentTime: new Date().toLocaleString(),
       
-      // 轨迹相关（保留原有功能）
-      trajectoryPoints: [],
-      displayPoints: [],
-      smoothingFactor: 0.5,
-      // 关键点平滑轨迹相关
-      enableKeypointTrail: true,
-      selectedKeypointIndex: 0,
-      keypointTrailMaxPoints: 60,
-      keypointTrailTimeWindow: 6000, // 轨迹时间窗口：4秒（单位：毫秒）
-      smoothedKeypoint: null,
-      trajectoryCleanupTimer: null, // 轨迹清理定时器
-      
-      // 3D可视化相关
-      persons: [], // 存储所有人的数据
-      colorPalette: [0xff8c00, 0x4169e1, 0x32cd32, 0xffd700, 0x6a5acd, 0xdb7093],
-      width: 0,
-      height: 0,
-      loading: false,
-      animationTimer: null,
-      currentPointIndex: 0,
-      pointInterval: 1000,
-      maxDisplayPoints: 6,
-      viewMode: 'both', // 'pointclouds', 'keypoints', 'both'
-      useSmoothCurve: true, // 使用平滑曲线连接轨迹
-      trailCurveSegments: 64, // 曲线细分段数
-
-      // Three.js 相关属性
-      scene: null,
-      camera: null,
-      renderer: null,
-      controls: null,
-      pointsGroup: null,
-      lineGroup: null,
-      pointCloudsGroup: null,
-      keypointsGroup: null,
-      animationFrame: null,
-      initialCameraPosition: { x: 5, y: 5, z: 5 },
       isDestroyed: false // 标记组件是否已销毁
     }
   },
+  computed: {
+    // 显示的历史记录（过滤时间窗口内的）
+    displayPostureHistory() {
+      const now = Date.now()
+      const windowStart = now - this.postureHistoryTimeWindow
+      
+      // 过滤时间窗口内的记录
+      const recentHistory = this.postureHistory.filter(item => {
+        return item.endTime >= windowStart
+      })
+      
+      // 计算总时长用于百分比
+      const totalDuration = recentHistory.reduce((sum, item) => sum + item.duration, 0)
+      
+      // 添加宽度百分比
+      return recentHistory.map(item => ({
+        ...item,
+        widthPercent: totalDuration > 0 ? (item.duration / totalDuration * 100) : 0
+      }))
+    }
+  },
   mounted() {
+    this.initThree()
+
     this.initializeComponent()
   },
   beforeDestroy() {
     this.isDestroyed = true
     this.cleanup()
   },
+  beforeUnmount() {
+    window.removeEventListener('resize', this.handleWindowResize)
+    if (this.renderer) {
+      this.renderer.dispose()
+    }
+    this.disconnectWebSocket()
+    this.stopMonitoringStatusCheck()
+    this.stopHeartbeat()
+    this.clearDataTimeoutCheck()
+    if (this.durationTimer) {
+      clearInterval(this.durationTimer)
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+    }
+  },
+
   methods: {
+    // ==================== 3D Visualization ====================
+    initThree() {
+      const container = this.$refs.threeContainer
+      if (!container) return
+
+      // Scene
+      this.scene = new THREE.Scene()
+      this.scene.background = new THREE.Color(0x000000)
+      this.scene.fog = new THREE.Fog(0x000000, 10, 50)
+
+      // Camera
+      this.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000)
+      this.camera.position.set(0, 2, 5)
+      this.camera.lookAt(0, 0, 0)
+
+      // Renderer
+      this.renderer = new THREE.WebGLRenderer({ antialias: true })
+      this.renderer.setSize(container.clientWidth, container.clientHeight)
+      this.renderer.setPixelRatio(window.devicePixelRatio)
+      container.appendChild(this.renderer.domElement)
+
+      // Controls
+      this.controls = new OrbitControls(this.camera, this.renderer.domElement)
+      this.controls.enableDamping = true
+      this.controls.dampingFactor = 0.05
+
+      // Helpers
+      const gridHelper = new THREE.GridHelper(10, 10)
+      this.scene.add(gridHelper)
+      const axesHelper = new THREE.AxesHelper(1)
+      this.scene.add(axesHelper)
+
+      // Groups
+      this.pointCloudGroup = new THREE.Group()
+      this.scene.add(this.pointCloudGroup)
+
+      this.keypointGroup = new THREE.Group()
+      this.scene.add(this.keypointGroup)
+
+      this.trajectoryGroup = new THREE.Group()
+      this.scene.add(this.trajectoryGroup)
+
+      // Lights
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+      this.scene.add(ambientLight)
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
+      directionalLight.position.set(10, 10, 10)
+      this.scene.add(directionalLight)
+
+      // Animation Loop
+      this.animate()
+
+      // Resize Listener
+      window.addEventListener('resize', this.handleWindowResize)
+    },
+
+    animate() {
+      if (!this.renderer) return
+      requestAnimationFrame(this.animate)
+      this.controls.update()
+      this.renderThree()
+    },
+
+    renderThree() {
+      // Visibility Control
+      const mode = this.viewMode
+      this.pointCloudGroup.visible = mode === 'all' || mode === 'pointcloud'
+      this.keypointGroup.visible = mode === 'all' || mode === 'keypoints'
+      this.trajectoryGroup.visible = mode === 'all' || mode === 'trajectory'
+
+      this.renderer.render(this.scene, this.camera)
+    },
+
+    handleWindowResize() {
+      const container = this.$refs.threeContainer
+      if (!container || !this.camera || !this.renderer) return
+      
+      this.camera.aspect = container.clientWidth / container.clientHeight
+      this.camera.updateProjectionMatrix()
+      this.renderer.setSize(container.clientWidth, container.clientHeight)
+    },
+
+    updateThreeData(data) {
+      if (!data) return
+
+      // Update Point Cloud
+      this.pointCloudGroup.clear()
+      if (data.pointclouds && Array.isArray(data.pointclouds)) {
+        const points = []
+        const processPoints = (arr) => {
+            if (arr.length > 0 && typeof arr[0] === 'number') {
+                if (arr.length >= 3) points.push(new THREE.Vector3(arr[0], arr[1], arr[2]))
+            } else if (Array.isArray(arr)) {
+                arr.forEach(sub => processPoints(sub))
+            }
+        }
+        processPoints(data.pointclouds)
+
+        if (points.length > 0) {
+            const geometry = new THREE.BufferGeometry().setFromPoints(points)
+            const material = new THREE.PointsMaterial({ color: 0x0088ff, size: 0.1 })
+            const cloud = new THREE.Points(geometry, material)
+            this.pointCloudGroup.add(cloud)
+        }
+      }
+
+      // Update Keypoints
+      this.keypointGroup.clear()
+      let centerPoint = null
+      if (data.keypoints && Array.isArray(data.keypoints)) {
+        const points = []
+        const processKeypoints = (arr) => {
+             if (arr.length > 0 && typeof arr[0] === 'number') {
+                if (arr.length >= 3) points.push(new THREE.Vector3(arr[0], arr[1], arr[2]))
+            } else if (Array.isArray(arr)) {
+                arr.forEach(sub => processKeypoints(sub))
+            }
+        }
+        processKeypoints(data.keypoints)
+
+        if (points.length > 0) {
+            centerPoint = points[0] // Use first point for trajectory
+            
+            points.forEach(p => {
+                const geometry = new THREE.SphereGeometry(0.1, 16, 16)
+                const material = new THREE.MeshStandardMaterial({ color: 0xff0000 })
+                const sphere = new THREE.Mesh(geometry, material)
+                sphere.position.copy(p)
+                this.keypointGroup.add(sphere)
+            })
+        }
+      }
+
+      // Update Trajectory
+      this.updateTrajectory(centerPoint)
+    },
+
+    updateTrajectory(newPoint) {
+        const now = Date.now()
+        
+        // Add new point
+        if (newPoint) {
+            this.trajectoryPoints.push({ position: newPoint.clone(), timestamp: now })
+        }
+
+        // Remove old points
+        this.trajectoryPoints = this.trajectoryPoints.filter(p => now - p.timestamp <= this.trajectoryDuration)
+
+        // Render
+        this.trajectoryGroup.clear()
+        if (this.trajectoryPoints.length > 1) {
+            const points = this.trajectoryPoints.map(p => p.position)
+            const curve = new THREE.CatmullRomCurve3(points)
+            const geometry = new THREE.TubeGeometry(curve, points.length * 2, 0.05, 8, false)
+            const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 })
+            const mesh = new THREE.Mesh(geometry, material)
+            this.trajectoryGroup.add(mesh)
+        }
+    },
+    
+    resetCamera() {
+        if (this.controls) {
+            this.controls.reset()
+        }
+    },
+
+
     // ==================== 组件初始化和清理 ====================
     
     async initializeComponent() {
@@ -528,10 +793,6 @@ export default {
         // 明确禁用设备信息API调用
         console.warn('⚠️ 注意：TI6843不调用设备信息API，设备信息完全来自URL参数')
         
-        // 等待DOM准备就绪后初始化3D可视化
-        await this.$nextTick()
-        this.init3DVisualization()
-        
         // 跳过初始数据获取，等待WebSocket数据
         console.log('⏭️ 跳过初始数据获取，等待WebSocket实时数据')
         
@@ -546,6 +807,9 @@ export default {
         
         // 设置定时任务
         this.setupTimers()
+        
+        // 启动状态持续时长计时器
+        this.startDurationTimer()
         
         // 添加事件监听
         this.setupEventListeners()
@@ -652,6 +916,11 @@ export default {
         this.trajectoryCleanupTimer = null
       }
       
+      if (this.durationTimer) {
+        clearInterval(this.durationTimer)
+        this.durationTimer = null
+      }
+      
       // 停止警报闪烁
       this.stopAlertFlash()
 
@@ -667,68 +936,7 @@ export default {
       // 移除事件监听
       window.removeEventListener('resize', this.onWindowResize)
       
-      // 清理Three.js资源
-      // 1. 先清理组
-      if (this.pointsGroup) {
-        this.clearGroup(this.pointsGroup)
-        this.pointsGroup = null
-      }
-      if (this.lineGroup) {
-        this.clearGroup(this.lineGroup)
-        this.lineGroup = null
-      }
-      if (this.pointCloudsGroup) {
-        this.clearGroup(this.pointCloudsGroup)
-        this.pointCloudsGroup = null
-      }
-      if (this.keypointsGroup) {
-        this.clearGroup(this.keypointsGroup)
-        this.keypointsGroup = null
-      }
-      
-      // 2. 清理控制器
-      if (this.controls) {
-        this.controls.dispose()
-        this.controls = null
-      }
-      
-      // 3. 清理渲染器
-      if (this.renderer) {
-        if (this.renderer.domElement && this.renderer.domElement.parentNode) {
-          this.renderer.domElement.parentNode.removeChild(this.renderer.domElement)
-        }
-        this.renderer.dispose()
-        this.renderer = null
-      }
-      
-      // 4. 清理场景和相机
-      if (this.scene) {
-        this.scene.clear()
-        this.scene = null
-      }
-      
-      if (this.camera) {
-        this.camera = null
-      }
-      
       console.log('✅ 组件资源清理完成')
-    },
-    
-    // 清理Three.js组的辅助方法
-    clearGroup(group) {
-      if (!group) return
-      while (group.children.length > 0) {
-        const object = group.children[0]
-        group.remove(object)
-        if (object.geometry) object.geometry.dispose()
-        if (object.material) {
-          if (Array.isArray(object.material)) {
-            object.material.forEach(mat => mat.dispose())
-          } else {
-            object.material.dispose()
-          }
-        }
-      }
     },
 
     // ==================== 状态和文本处理 ====================
@@ -749,10 +957,57 @@ export default {
         'standing': '站立',
         'sitting': '坐着',
         'lying': '躺着',
-        'walking': '走动',
+        'walking': '行走',
+        'raising_hand': '举手',
         'fall': '跌倒'
       }
       return textMap[status] || '未知'
+    },
+    
+    getPostureEmoji(status) {
+      const emojiMap = {
+        'standing': '🧍',
+        'sitting': '🪑',
+        'lying': '🛌',
+        'walking': '🚶',
+        'raising_hand': '🙋',
+        'fall': '🤾'
+      }
+      return emojiMap[status] || '❓'
+    },
+    
+    // 格式化持续时长（完整格式）
+    formatDuration(ms) {
+      if (!ms || ms < 0) return '00:00:00'
+      
+      const seconds = Math.floor(ms / 1000)
+      const hours = Math.floor(seconds / 3600)
+      const minutes = Math.floor((seconds % 3600) / 60)
+      const secs = seconds % 60
+      
+      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+    },
+    
+    // 格式化短时长（用于时间轴）
+    formatShortDuration(ms) {
+      if (!ms || ms < 0) return '0秒'
+      
+      const seconds = Math.floor(ms / 1000)
+      const minutes = Math.floor(seconds / 60)
+      const hours = Math.floor(minutes / 60)
+      
+      if (hours > 0) {
+        return `${hours}小时`
+      } else if (minutes > 0) {
+        return `${minutes}分`
+      } else {
+        return `${seconds}秒`
+      }
+    },
+    
+    // 获取某个状态今日出现次数
+    getStateCount(state) {
+      return this.todayStateCount[state] || 0
     },
     
     getMonitoringStatusType(status) {
@@ -859,6 +1114,62 @@ export default {
         sensorConnection: this.sensorConnectionStatus,
         deviceStatus: this.currentDevice.status
       })
+    },
+
+    // ==================== 状态持续时长和历史管理 ====================
+    
+    // 启动持续时长计时器
+    startDurationTimer() {
+      // 初始化当前状态开始时间
+      if (!this.currentStateStartTime) {
+        this.currentStateStartTime = Date.now()
+      }
+      
+      // 每秒更新一次持续时长
+      this.durationTimer = setInterval(() => {
+        if (this.currentStateStartTime) {
+          this.currentStateDuration = Date.now() - this.currentStateStartTime
+        }
+      }, 1000)
+    },
+    
+    // 结束当前状态（状态切换时调用）
+    endCurrentState() {
+      if (!this.currentStateStartTime) return
+      
+      const now = Date.now()
+      const duration = now - this.currentStateStartTime
+      
+      // 只记录持续时间超过1秒的状态
+      if (duration > 1000) {
+        // 添加到历史记录
+        this.postureHistory.push({
+          status: this.postureStatus,
+          startTime: this.currentStateStartTime,
+          endTime: now,
+          duration: duration
+        })
+        
+        // 更新今日统计
+        if (this.todayStateCount[this.postureStatus] !== undefined) {
+          this.todayStateCount[this.postureStatus]++
+        }
+        
+        // 限制历史记录数量
+        if (this.postureHistory.length > this.maxHistoryRecords) {
+          this.postureHistory.shift()
+        }
+        
+        console.log(`📊 状态结束: ${this.getPostureText(this.postureStatus)}, 持续: ${this.formatShortDuration(duration)}`)
+      }
+    },
+    
+    // 开始新状态
+    startNewState(newStatus) {
+      this.currentStateStartTime = Date.now()
+      this.currentStateDuration = 0
+      
+      console.log(`🎬 新状态开始: ${this.getPostureText(newStatus)}`)
     },
 
     // ==================== 操作控制 ====================
@@ -1059,6 +1370,39 @@ export default {
       this.sensorConnectionStatus = '已连接'
       this.updateOverallStatus()
       
+      // 同步设备信息（从 WebSocket 数据中更新）
+      if (data.deviceId && data.deviceId !== this.currentDevice.deviceId) {
+        console.log(`🔄 从 WebSocket 数据更新设备ID: ${this.currentDevice.deviceId} -> ${data.deviceId}`)
+        this.currentDevice.deviceId = data.deviceId
+        // 重新订阅正确的设备
+        this.subscribeToDevice()
+      }
+      
+      // 同步人员信息（从 WebSocket 数据中更新）
+      if (data.personId !== undefined) {
+        if (data.personId && data.personId.trim() !== '') {
+          // 更新或设置人员ID
+          if (this.currentPerson.id !== data.personId) {
+            console.log(`👤 更新人员ID: ${this.currentPerson.id || '无'} -> ${data.personId}`)
+            this.currentPerson.id = data.personId
+            // 如果没有名字，暂时用ID代替
+            if (!this.currentPerson.name || this.currentPerson.name === '未知用户' || this.currentPerson.name === '未绑定人员') {
+              this.currentPerson.name = data.personId
+            }
+            // 动态更新页面标题
+            this.updatePageTitle()
+          }
+        } else {
+          // personId为空，表示设备未绑定人员
+          if (this.currentPerson.id) {
+            console.log(`👤 设备未绑定人员，清除人员信息`)
+          }
+          this.currentPerson.id = ''
+          this.currentPerson.name = '未绑定人员'
+          this.updatePageTitle()
+        }
+      }
+      
       // 格式化数据
       const formattedData = formatPostureDataForDisplay(data)
       
@@ -1066,10 +1410,25 @@ export default {
       this.currentPostureData = formattedData
       this.lastUpdateTime = new Date().toISOString()
       
+      // 更新3D视图
+      this.updateThreeData(data)
+      
       // 更新位姿状态（检测跌倒）
       if (data.postureStatus || data.postureState) {
         const postureValue = data.postureStatus || data.postureState
         const mappedStatus = this.postureStatusMapping[postureValue] || 'standing'
+        
+        // 检测状态是否发生变化
+        if (mappedStatus !== this.postureStatus) {
+          console.log('🔄 状态变化:', this.postureStatus, '->', mappedStatus)
+          
+          // 记录旧状态的结束
+          this.endCurrentState()
+          
+          // 开始新状态
+          this.startNewState(mappedStatus)
+        }
+        
         this.postureStatus = mappedStatus
         
         // 日志输出位姿状态
@@ -1079,12 +1438,6 @@ export default {
           isFallen: mappedStatus === 'fall'
         })
       }
-      
-      // 更新3D可视化
-      this.updatePostureVisualization(formattedData)
-
-      // 更新关键点平滑轨迹
-      this.updateKeypointTrail(formattedData)
     },
 
     // ==================== 数据获取方法 ====================
@@ -1125,9 +1478,6 @@ export default {
           this.postureStatus = mappedStatus
           console.log('🏃 当前位姿状态:', this.postureStatus)
         }
-
-        // 更新3D可视化
-        this.updatePostureVisualization(formattedData)
         
       } catch (error) {
         console.error('❌ 获取位姿数据失败:', error)
@@ -1140,572 +1490,6 @@ export default {
     },
 
     // fetchTrajectoryData 已删除 - 位姿数据从 ti6843-posture API 获取，不需要单独的轨迹 API
-
-    // ==================== 3D可视化控制 ====================
-    
-    setViewMode(mode) {
-      if (this.isDestroyed) return
-      this.viewMode = mode
-      console.log('🎨 切换显示模式:', mode)
-      
-      // 根据模式显示/隐藏不同的组
-      if (this.pointCloudsGroup) {
-        this.pointCloudsGroup.visible = mode === 'pointclouds' || mode === 'both'
-      }
-      if (this.keypointsGroup) {
-        this.keypointsGroup.visible = mode === 'keypoints' || mode === 'both'
-      }
-    },
-    
-    resetCamera() {
-      if (this.isDestroyed) return
-      if (this.camera && this.controls) {
-        this.camera.position.set(
-          this.initialCameraPosition.x,
-          this.initialCameraPosition.y,
-          this.initialCameraPosition.z
-        )
-        this.camera.lookAt(0, 0, 0)
-        this.controls.reset()
-        console.log('📷 摄像机视角已重置')
-      }
-    },
-    
-    updatePostureVisualization(data) {
-      if (this.isDestroyed || !data) return
-      if (!this.scene || !this.camera || !this.renderer) return
-      
-      // 构造persons数据格式以兼容现有的3D渲染逻辑
-      this.persons = []
-      
-      if (data.pointclouds || data.keypoints) {
-        this.persons.push({
-          id: data.personId || 'person_0',
-          pointClouds: data.pointclouds || [],
-          keypoints: data.keypoints || []
-        })
-      }
-      
-      // 更新3D视图
-      this.update3DView()
-    },
-
-    // 基于关键点的实时平滑运动轨迹
-    updateKeypointTrail(data) {
-      if (!this.enableKeypointTrail) return
-      if (!data || !Array.isArray(data.keypoints) || data.keypoints.length === 0) return
-
-      const idx = Math.max(0, Math.min(this.selectedKeypointIndex, data.keypoints.length - 1))
-      const kp = data.keypoints[idx]
-      if (!Array.isArray(kp) || kp.length < 3) return
-
-      const rawPoint = { x: kp[0], y: kp[1], z: kp[2] }
-
-      // 指数滑动平均 EMA 平滑
-      const alpha = Math.max(0, Math.min(1, this.smoothingFactor || 0.5))
-      if (!this.smoothedKeypoint) {
-        this.smoothedKeypoint = { ...rawPoint }
-      } else {
-        this.smoothedKeypoint = {
-          x: alpha * rawPoint.x + (1 - alpha) * this.smoothedKeypoint.x,
-          y: alpha * rawPoint.y + (1 - alpha) * this.smoothedKeypoint.y,
-          z: alpha * rawPoint.z + (1 - alpha) * this.smoothedKeypoint.z
-        }
-      }
-
-      // 获取当前时间戳
-      const currentTime = Date.now()
-
-      // 将平滑后的点推入显示缓冲，并添加时间戳
-      this.displayPoints.push({ 
-        ...this.smoothedKeypoint,
-        timestamp: currentTime
-      })
-
-      // 清理超过时间窗口的旧轨迹点（4秒外的点）
-      this.cleanupOldTrajectoryPoints()
-
-      // 同时保留原有的点数限制作为备份机制
-      if (this.displayPoints.length > this.keypointTrailMaxPoints) {
-        this.displayPoints.shift()
-      }
-
-      // 渲染轨迹
-      this.updateTrajectory3D()
-    },
-
-    // 清理超过时间窗口的旧轨迹点
-    cleanupOldTrajectoryPoints() {
-      const currentTime = Date.now()
-      const timeWindow = this.keypointTrailTimeWindow
-
-      // 过滤掉超过4秒的轨迹点
-      this.displayPoints = this.displayPoints.filter(point => {
-        // 如果点没有时间戳（兼容旧数据），保留它
-        if (!point.timestamp) return true
-        // 只保留时间窗口内的点
-        return (currentTime - point.timestamp) <= timeWindow
-      })
-
-      console.log(`🧹 轨迹清理: 当前显示 ${this.displayPoints.length} 个点 (${timeWindow / 1000}秒内)`)
-    },
-
-    // ==================== 轨迹动画控制 ====================
-    
-    startAnimation() {
-      // 停止现有动画
-      this.stopAnimation()
-
-      // 重置状态
-      this.currentPointIndex = 0
-      this.displayPoints = []
-
-      // 重置3D场景中的点和线
-      this.clearTrajectoryScene()
-
-      console.log(`🎬 开始轨迹动画展示，共 ${this.trajectoryPoints.length} 个点，间隔 ${this.pointInterval}ms`)
-
-      // 记录动画开始时间
-      const animationStartTime = Date.now()
-
-      // 设置定时器逐个显示点
-      this.animationTimer = setInterval(() => {
-        if (this.currentPointIndex >= this.trajectoryPoints.length) {
-          this.stopAnimation()
-          return
-        }
-
-        // 添加新的点到显示数组，并附加模拟时间戳
-        const point = this.trajectoryPoints[this.currentPointIndex]
-        const simulatedTimestamp = animationStartTime + (this.currentPointIndex * this.pointInterval)
-        
-        this.displayPoints.push({
-          ...point,
-          timestamp: simulatedTimestamp
-        })
-
-        // 清理超过时间窗口的旧轨迹点
-        this.cleanupOldTrajectoryPoints()
-
-        // 同时保留原有的点数限制作为备份机制
-        if (this.displayPoints.length > this.maxDisplayPoints) {
-          this.displayPoints.shift() // 移除最早的点
-        }
-
-        console.log(`📍 显示第 ${this.currentPointIndex + 1} 个点，当前共显示 ${this.displayPoints.length} 个点`)
-
-        // 更新3D轨迹视图
-        this.updateTrajectory3D()
-
-        // 移动到下一个点
-        this.currentPointIndex++
-      }, this.pointInterval)
-    },
-
-    stopAnimation() {
-      if (this.animationTimer) {
-        clearInterval(this.animationTimer)
-        this.animationTimer = null
-      }
-    },
-
-    // ==================== Three.js 3D可视化 ====================
-    
-    onWindowResize() {
-      if (this.isDestroyed) return
-      if (!this.camera || !this.renderer || !this.$refs.trajectoryContainer) return
-
-      const container = this.$refs.trajectoryContainer
-      if (!container.clientWidth) return
-      
-      this.width = container.clientWidth
-
-      this.camera.aspect = this.width / this.height
-      this.camera.updateProjectionMatrix()
-      this.renderer.setSize(this.width, this.height)
-    },
-
-    init3DVisualization() {
-      // 如果已经有实例，先清理
-      if (this.scene || this.renderer) {
-        console.log('⚠️ 检测到已存在的Three.js实例，先清理')
-        this.cleanup()
-      }
-      
-      const container = this.$refs.trajectoryContainer
-      if (!container) {
-        console.warn('⚠️ 3D容器未找到，跳过初始化')
-        return
-      }
-      
-      this.width = container.clientWidth
-      this.height = 400
-
-      console.log('🎨 初始化3D可视化系统')
-      
-      try {
-        // 创建场景
-        this.scene = new THREE.Scene()
-        this.scene.background = new THREE.Color(0xf5f7fb)//3D图像背景色
-
-        // 创建相机
-        this.camera = new THREE.PerspectiveCamera(75, this.width / this.height, 0.1, 1000)
-        this.camera.position.set(
-          this.initialCameraPosition.x,
-          this.initialCameraPosition.y,
-          this.initialCameraPosition.z
-        )
-        this.camera.lookAt(0, 0, 0)
-
-        // 创建渲染器
-        this.renderer = new THREE.WebGLRenderer({ antialias: true })
-        this.renderer.setSize(this.width, this.height)
-        this.renderer.shadowMap.enabled = true
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
-        container.appendChild(this.renderer.domElement)
-
-        // 添加轨道控制器
-        this.controls = new OrbitControls(this.camera, this.renderer.domElement)
-        this.controls.enableDamping = true
-        this.controls.dampingFactor = 0.25
-        this.controls.screenSpacePanning = false
-        this.controls.maxPolarAngle = Math.PI / 2
-
-        // 创建坐标轴辅助
-        const axesHelper = new THREE.AxesHelper(5)
-        this.scene.add(axesHelper)
-
-        // 创建网格
-        this.addGrid()
-
-        // 创建不同功能的组
-        this.pointsGroup = new THREE.Group() // 轨迹点
-        this.lineGroup = new THREE.Group() // 轨迹线
-        this.pointCloudsGroup = new THREE.Group() // 点云数据
-        this.keypointsGroup = new THREE.Group() // 关键点数据
-        
-        this.scene.add(this.pointsGroup)
-        this.scene.add(this.lineGroup)
-        this.scene.add(this.pointCloudsGroup)
-        this.scene.add(this.keypointsGroup)
-
-        // 添加灯光系统
-        this.setupLighting()
-
-        // 确保isDestroyed标志为false
-        this.isDestroyed = false
-        
-        // 确保所有矩阵都已更新
-        this.camera.updateProjectionMatrix()
-        this.camera.updateMatrixWorld(true)
-        if (this.scene) {
-          this.scene.updateMatrixWorld(true)
-        }
-        
-        // 开始动画循环
-        this.animate()
-        
-        console.log('✅ 3D可视化系统初始化完成')
-      } catch (error) {
-        console.error('❌ 3D可视化初始化失败:', error)
-        this.isDestroyed = true
-      }
-    },
-    
-    setupLighting() {
-      // 环境光
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
-      this.scene.add(ambientLight)
-
-      // 主方向光
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8)
-      directionalLight.position.set(10, 10, 10)
-      directionalLight.castShadow = true
-      directionalLight.shadow.mapSize.width = 2048
-      directionalLight.shadow.mapSize.height = 2048
-      this.scene.add(directionalLight)
-
-      // 补充光源
-      const fillLight = new THREE.DirectionalLight(0xffffff, 0.3)
-      fillLight.position.set(-10, -10, -10)
-      this.scene.add(fillLight)
-    },
-
-    animate() {
-      // 检查组件是否已销毁
-      if (this.isDestroyed) {
-        return
-      }
-      
-      // 检查必要的对象是否存在
-      if (!this.renderer || !this.scene || !this.camera) {
-        return
-      }
-      
-      // 先请求下一帧动画（在渲染之前）
-      this.animationFrame = requestAnimationFrame(() => this.animate())
-      
-      try {
-        // 更新控制器
-        if (this.controls && !this.isDestroyed) {
-          this.controls.update()
-        }
-
-        // 渲染场景
-        if (!this.isDestroyed && this.renderer && this.scene && this.camera) {
-          this.renderer.render(this.scene, this.camera)
-        }
-      } catch (error) {
-        console.error('Three.js渲染错误:', error)
-        this.isDestroyed = true
-        // 确保停止动画循环
-        if (this.animationFrame) {
-          cancelAnimationFrame(this.animationFrame)
-          this.animationFrame = null
-        }
-      }
-    },
-
-    clearTrajectoryScene() {
-      if (this.isDestroyed) return
-      // 只清除轨迹相关的点和线
-      if (this.pointsGroup) {
-        while (this.pointsGroup.children.length > 0) {
-          const object = this.pointsGroup.children[0]
-          this.pointsGroup.remove(object)
-          if (object.geometry) object.geometry.dispose()
-          if (object.material) object.material.dispose()
-        }
-      }
-
-      if (this.lineGroup) {
-        while (this.lineGroup.children.length > 0) {
-          const object = this.lineGroup.children[0]
-          this.lineGroup.remove(object)
-          if (object.geometry) object.geometry.dispose()
-          if (object.material) object.material.dispose()
-        }
-      }
-    },
-
-    clearPostureScene() {
-      if (this.isDestroyed) return
-      // 只清除位姿相关的点云和关键点
-      if (this.pointCloudsGroup) {
-        while (this.pointCloudsGroup.children.length > 0) {
-          const object = this.pointCloudsGroup.children[0]
-          this.pointCloudsGroup.remove(object)
-          if (object.geometry) object.geometry.dispose()
-          if (object.material) object.material.dispose()
-        }
-      }
-      
-      if (this.keypointsGroup) {
-        while (this.keypointsGroup.children.length > 0) {
-          const object = this.keypointsGroup.children[0]
-          this.keypointsGroup.remove(object)
-          if (object.geometry) object.geometry.dispose()
-          if (object.material) object.material.dispose()
-        }
-      }
-    },
-
-    updateTrajectory3D() {
-      if (this.isDestroyed || !this.displayPoints.length) return
-      if (!this.scene || !this.pointsGroup || !this.lineGroup) return
-
-      // 清除现有的轨迹点和线
-      this.clearTrajectoryScene()
-
-      // 渲染轨迹点
-      for (let i = 0; i < this.displayPoints.length; i++) {
-        const point = this.displayPoints[i]
-
-        // 计算透明度：最新的点完全不透明，最旧的点最透明
-        const opacity = (i + 1) / this.displayPoints.length
-
-        // 创建球体表示点
-        const sphereGeometry = new THREE.SphereGeometry(0.05, 16, 16)
-        const sphereMaterial = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: opacity
-        })
-        const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial)
-
-        sphere.position.set(point.x, point.y, point.z)
-        this.pointsGroup.add(sphere)
-      }
-
-      // 如果有多个点，创建轨迹线
-      if (this.displayPoints.length > 1){
-        let curvePoints = []
-
-        if (this.useSmoothCurve && this.displayPoints.length >= 3) {
-          // 使用 Catmull-Rom 生成平滑曲线，按时间顺序连接
-          const vectors = this.displayPoints.map(p => new THREE.Vector3(p.x, p.y, p.z))
-          const curve = new THREE.CatmullRomCurve3(vectors, false, 'centripetal', 0.5)
-          curvePoints = curve.getPoints(Math.max(this.trailCurveSegments, this.displayPoints.length))
-        } else {
-          // 点数不足或关闭平滑时，使用原始折线
-          curvePoints = this.displayPoints.map(p => new THREE.Vector3(p.x, p.y, p.z))
-        }
-
-        const lineGeometry = new THREE.BufferGeometry()
-        const linePositions = []
-        for (let i = 0; i < curvePoints.length; i++) {
-          const v = curvePoints[i]
-          linePositions.push(v.x, v.y, v.z)
-        }
-        lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3))
-
-        const lineMaterial = new THREE.LineBasicMaterial({
-          color: 0x4CAF50,
-          linewidth: 2,
-          opacity: 0.9,
-          transparent: true
-        })
-
-        const line = new THREE.Line(lineGeometry, lineMaterial)
-        this.lineGroup.add(line)
-      }
-    },
-
-    update3DView() {
-      if (this.isDestroyed) return
-      if (!this.scene || !this.pointCloudsGroup || !this.keypointsGroup) return
-      
-      // 清除旧的位姿数据
-      this.clearPostureScene()
-
-      if (!this.persons || this.persons.length === 0) {
-        console.log('📊 没有位姿数据需要渲染')
-        return
-      }
-
-      console.log('🎨 开始渲染位姿数据:', this.persons)
-
-      this.persons.forEach((person, index) => {
-        const color = this.colorPalette[index % this.colorPalette.length]
-
-        // 渲染点云数据
-        if (person.pointClouds && person.pointClouds.length > 0) {
-          this.renderPointClouds(person.pointClouds, color)
-        }
-
-        // 渲染关键点数据
-        if (person.keypoints && person.keypoints.length > 0) {
-          this.renderKeypoints(person.keypoints, color)
-        }
-      })
-
-      // 根据当前视图模式设置可见性
-      this.setViewMode(this.viewMode)
-    },
-    
-    renderPointClouds(pointClouds, color) {
-      if (this.isDestroyed || !this.pointCloudsGroup) return
-      try {
-        const positions = []
-        let validPointCount = 0
-        
-        // 处理点云数据，支持多种数据格式
-        if (Array.isArray(pointClouds)) {
-          // 如果是三维数组 [[[x,y,z], ...], ...]
-          if (pointClouds.length > 0 && Array.isArray(pointClouds[0])) {
-            pointClouds.forEach(cloud => {
-              if (Array.isArray(cloud)) {
-                cloud.forEach(point => {
-                  if (Array.isArray(point) && point.length >= 3) {
-                    positions.push(point[0], point[1], point[2])
-                    validPointCount++
-                  }
-                })
-              }
-            })
-          } else {
-            // 如果是二维数组 [[x,y,z], ...]
-            pointClouds.forEach(point => {
-              if (Array.isArray(point) && point.length >= 3) {
-                positions.push(point[0], point[1], point[2])
-                validPointCount++
-              }
-            })
-          }
-        }
-        
-        if (validPointCount > 0) {
-          const pointsGeometry = new THREE.BufferGeometry()
-          pointsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-          
-          const pointsMaterial = new THREE.PointsMaterial({
-            color: color,
-            size: 0.02,
-            sizeAttenuation: true,
-            transparent: true,
-            opacity: 0.8
-          })
-          
-          const points = new THREE.Points(pointsGeometry, pointsMaterial)
-          this.pointCloudsGroup.add(points)
-          
-          console.log(`✅ 渲染点云数据: ${validPointCount} 个点`)
-        }
-      } catch (error) {
-        console.error('❌ 渲染点云数据失败:', error)
-      }
-    },
-    
-    renderKeypoints(keypoints, color) {
-      if (this.isDestroyed || !this.keypointsGroup) return
-      try {
-        let validKeypointCount = 0
-        const keypointGeometry = new THREE.SphereGeometry(0.03, 8, 8)
-        const keypointMaterial = new THREE.MeshLambertMaterial({ 
-          color: color,
-          transparent: true,
-          opacity: 0.9
-        })
-
-        keypoints.forEach(point => {
-          if (Array.isArray(point) && point.length >= 3) {
-            const keypoint = new THREE.Mesh(keypointGeometry, keypointMaterial.clone())
-            keypoint.position.set(point[0], point[1], point[2])
-            keypoint.castShadow = true
-            this.keypointsGroup.add(keypoint)
-            validKeypointCount++
-          }
-        })
-        
-        if (validKeypointCount > 0) {
-          console.log(`✅ 渲染关键点数据: ${validKeypointCount} 个关键点`)
-        }
-      } catch (error) {
-        console.error('❌ 渲染关键点数据失败:', error)
-      }
-    },
-
-    addGrid() {
-      // 添加网格辅助
-      const gridHelper = new THREE.GridHelper(10, 10, 0x555555, 0x333333)
-      gridHelper.position.y = -0.01 // 稍微降低避免z-fighting
-      this.scene.add(gridHelper)
-
-      // 添加XZ平面
-      const planeGeometry = new THREE.PlaneGeometry(10, 10)
-      const planeMaterial = new THREE.MeshBasicMaterial({
-        color: 0x2a2a2a,
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.DoubleSide
-      })
-
-      const plane = new THREE.Mesh(planeGeometry, planeMaterial)
-      plane.rotation.x = -Math.PI / 2
-      plane.position.y = -0.02
-      plane.receiveShadow = true
-      this.scene.add(plane)
-    },
 
     // ==================== 跌倒警报相关方法 ====================
     
@@ -1783,31 +1567,12 @@ export default {
      * 处理新跌倒警报
      */
     handleNewFallAlert(alert) {
-      console.log('🚨 处理新跌倒警报:', alert)
-      
-      // 添加到活跃警报列表（如果不存在）
-      const existingIndex = this.activeFallAlerts.findIndex(a => a.id === alert.id)
-      if (existingIndex === -1) {
-        this.activeFallAlerts.unshift(alert)
-      }
-      
-      // 顶部提示条功能已移除，仅保留消息提示与声音
-
-      // 播放警报音效
-      // this.playAlertSound()
-      
-      // // 开始屏幕闪烁
-      // this.startAlertFlash()
-      
-      // // 浏览器通知
-      // this.showBrowserNotification(alert)
-      
-      // 非阻塞通知
-      // this.$message.error({
-      //   message: `⚠️ ${alert.personName || '未知人员'} 发生跌倒！位置：${alert.location || '未知'}`,
-      //   duration: 5000,
-      //   showClose: true
-      // })
+      console.log('🚨 收到跌倒警报数据 (已禁用弹窗):', alert)
+      // 用户要求移除跌倒提示框，因此不再将警报添加到活跃列表
+      // const existingIndex = this.activeFallAlerts.findIndex(a => a.id === alert.id)
+      // if (existingIndex === -1) {
+      //   this.activeFallAlerts.unshift(alert)
+      // }
     },
     
     /**
@@ -2177,18 +1942,7 @@ export default {
       }
       
       // 清除当前数据
-      this.pointClouds = []
-      this.keypoints = []
       this.postureStatus = 'unknown'
-      this.displayPoints = []
-      
-      // 清除3D场景
-      if (this.pointCloudsGroup) {
-        this.clearGroup(this.pointCloudsGroup)
-      }
-      if (this.keypointsGroup) {
-        this.clearGroup(this.keypointsGroup)
-      }
       
       // 更新页面标题
       this.updatePageTitle()
@@ -2297,6 +2051,7 @@ export default {
   /* flex: 1; Removed to let recent alerts expand instead */
   display: flex;
   flex-direction: column;
+  overflow: visible; /* 确保内容不被裁剪 */
 }
 
 .card-header {
@@ -2318,25 +2073,6 @@ export default {
   gap: 8px;
 }
 
-.visualization-container {
-  width: 100%;
-  /* flex: 1; Removed */
-  height: 350px; /* Fixed height */
-  background: #f5f7fb;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.visualization-tip {
-  margin-top: 12px;
-  padding: 8px 12px;
-  background: #f3f4f6;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #6b7280;
-  text-align: center;
-}
-
 /* 位姿状态卡片 */
 .posture-status-card {
   background: rgba(255, 255, 255, 0.95);
@@ -2344,13 +2080,15 @@ export default {
   padding: 24px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .status-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
 }
 
 .status-header h3 {
@@ -2360,26 +2098,34 @@ export default {
   color: #374151;
 }
 
-.posture-display {
+/* 当前状态展示区 */
+.current-posture-section {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+  border-radius: 12px;
 }
 
-.posture-icon-large {
-  width: 140px;
-  height: 140px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(147, 197, 253, 0.1));
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.posture-icon-container {
   flex-shrink: 0;
 }
 
+.posture-icon-large {
+  width: 120px;
+  height: 120px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.15), rgba(147, 197, 253, 0.15));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.2);
+}
+
 .posture-icon-large svg {
-  width: 80px;
-  height: 80px;
+  width: 70px;
+  height: 70px;
   color: #a78bfa;
 }
 
@@ -2387,60 +2133,246 @@ export default {
   color: #ef4444;
 }
 
-.icon-unknown {
-  font-size: 60px;
-  color: #9ca3af;
-}
-
-.posture-info {
-  flex: 1;
-}
-
-.current-state {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.state-label {
-  font-size: 16px;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-.state-value {
-  font-size: 28px;
-  font-weight: 700;
-}
-
-.state-value.state-sitting {
-  color: #3b82f6;
-}
-
-.state-value.state-standing {
-  color: #10b981;
-}
-
-.state-value.state-walking {
+.icon-raising-hand svg {
   color: #f59e0b;
 }
 
-.state-value.state-fall {
+.icon-unknown {
+  font-size: 50px;
+  color: #9ca3af;
+}
+
+.posture-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.current-state-label {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.current-state-value {
+  display: flex;
+  align-items: baseline;
+}
+
+.state-text {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.state-text.state-sitting {
+  color: #3b82f6;
+}
+
+.state-text.state-standing {
+  color: #10b981;
+}
+
+.state-text.state-walking {
+  color: #f59e0b;
+}
+
+.state-text.state-raising_hand {
+  color: #f59e0b;
+}
+
+.state-text.state-fall {
   color: #ef4444;
 }
 
-.state-icons {
+.state-duration {
   display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.duration-icon {
+  font-size: 16px;
+  color: #a78bfa;
+}
+
+.duration-text {
+  font-weight: 500;
+}
+
+/* 状态历史时间轴 */
+.posture-timeline-section {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
-.state-item {
+.timeline-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.timeline-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.timeline-subtitle {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.timeline-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-track {
+  display: flex;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  transition: all 0.3s;
+  cursor: pointer;
+  position: relative;
+}
+
+.timeline-item:hover {
+  filter: brightness(1.1);
+  z-index: 1;
+  transform: scaleY(1.05);
+}
+
+.timeline-item.timeline-walking {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+}
+
+.timeline-item.timeline-sitting {
+  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+}
+
+.timeline-item.timeline-standing {
+  background: linear-gradient(135deg, #34d399, #10b981);
+}
+
+.timeline-item.timeline-raising_hand {
+  background: linear-gradient(135deg, #fb923c, #f97316);
+}
+
+.timeline-item.timeline-fall {
+  background: linear-gradient(135deg, #f87171, #ef4444);
+}
+
+.timeline-content {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 2px;
+  color: white;
+  font-weight: 600;
+}
+
+.timeline-emoji {
+  font-size: 18px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+.timeline-duration {
+  font-size: 11px;
+  opacity: 0.95;
+  white-space: nowrap;
+}
+
+.timeline-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
   gap: 6px;
-  padding: 12px 16px;
+  font-size: 13px;
+}
+
+.legend-emoji {
+  font-size: 16px;
+}
+
+.legend-text {
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.legend-arrow {
+  color: #9ca3af;
+  font-size: 12px;
+  margin: 0 4px;
+}
+
+.timeline-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 2px dashed #e5e7eb;
+}
+
+.empty-icon {
+  font-size: 32px;
+  color: #d1d5db;
+}
+
+.empty-text {
+  font-size: 13px;
+  color: #9ca3af;
+  text-align: center;
+}
+
+/* 全部状态卡片区 */
+.all-states-section {
+  padding-top: 8px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.states-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px;
   border-radius: 12px;
   background: #f9fafb;
   border: 2px solid transparent;
@@ -2448,19 +2380,55 @@ export default {
   cursor: pointer;
 }
 
-.state-item.active {
+.state-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.state-card.state-active {
   background: linear-gradient(135deg, rgba(167, 139, 250, 0.15), rgba(147, 197, 253, 0.15));
   border-color: #a78bfa;
-  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.2);
+  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.25);
 }
 
-.state-icon {
-  font-size: 32px;
+.state-card-walking.state-active {
+  border-color: #f59e0b;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.15));
 }
 
-.state-name {
+.state-card-sitting.state-active {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.15), rgba(59, 130, 246, 0.15));
+}
+
+.state-card-standing.state-active {
+  border-color: #10b981;
+  background: linear-gradient(135deg, rgba(52, 211, 153, 0.15), rgba(16, 185, 129, 0.15));
+}
+
+.state-card-raising_hand.state-active {
+  border-color: #f97316;
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.15), rgba(249, 115, 22, 0.15));
+}
+
+.state-card-fall.state-active {
+  border-color: #ef4444;
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.15), rgba(239, 68, 68, 0.15));
+}
+
+.state-card-icon {
+  font-size: 28px;
+}
+
+.state-card-name {
   font-size: 13px;
-  color: #6b7280;
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.state-card-count {
+  font-size: 11px;
+  color: #9ca3af;
   font-weight: 500;
 }
 
@@ -2789,9 +2757,14 @@ export default {
     grid-template-columns: 1fr;
   }
 
-  .posture-display {
+  .current-posture-section {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .states-grid {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -2806,8 +2779,75 @@ export default {
     height: 300px;
   }
 
-  .state-icons {
-    flex-wrap: wrap;
+  .states-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
+  
+  .timeline-legend {
+    font-size: 11px;
+  }
+  
+  .legend-emoji {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .states-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .posture-icon-large {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .posture-icon-large svg {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .state-text {
+    font-size: 24px;
+  }
+}
+
+/* Dropdown active state */
+.el-dropdown-menu__item.is-active {
+  background-color: #f0f9ff;
+  color: #0ea5e9;
+}
+
+/* 3D Visualization Styles */
+.visualization-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 500px; /* Fixed height for 3D view */
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.visualization-container {
+  flex: 1;
+  background: #000000;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
 }
 </style>

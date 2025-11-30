@@ -972,18 +972,19 @@ export default {
           this.heartStatus = this.evaluateStatus(this.heartRate, 'heart')
         }
         // 优先使用波形数据，如果不存在则使用单个速率值
+        // 从右往左显示：新数据添加到数组开头，旧数据从末尾删除
         if (data.heartRateWave && Array.isArray(data.heartRateWave)) {
-          this.heartWaveform.push(...data.heartRateWave)
+          this.heartWaveform.unshift(...data.heartRateWave.reverse())
           if (this.heartWaveform.length > 100) {
-            this.heartWaveform.splice(0, this.heartWaveform.length - 100)
+            this.heartWaveform.splice(100)
           }
-          console.log('📊 更新心率波形，长度:', this.heartWaveform.length)
+          console.log('📊 更新心率波形（右→左），长度:', this.heartWaveform.length)
         } else if (data.heartRate !== undefined) {
-          this.heartWaveform.push(Number(data.heartRate))
+          this.heartWaveform.unshift(Number(data.heartRate))
           if (this.heartWaveform.length > 30) {
-            this.heartWaveform.shift()
+            this.heartWaveform.pop()
           }
-          console.log('📊 添加心率数据点，长度:', this.heartWaveform.length)
+          console.log('📊 添加心率数据点（右→左），长度:', this.heartWaveform.length)
         }
 
         // 2. 处理呼吸数据（固定字段）
@@ -997,19 +998,20 @@ export default {
           this.breathStatus = this.evaluateStatus(this.breathRate, 'breath')
         }
         // 优先使用波形数据，如果不存在则使用单个速率值
+        // 从右往左显示：新数据添加到数组开头，旧数据从末尾删除
         const breathValue = data.respiration || data.breathRate
         if (data.respirationWave && Array.isArray(data.respirationWave)) {
-          this.breathWaveform.push(...data.respirationWave)
+          this.breathWaveform.unshift(...data.respirationWave.reverse())
           if (this.breathWaveform.length > 100) {
-            this.breathWaveform.splice(0, this.breathWaveform.length - 100)
+            this.breathWaveform.splice(100)
           }
-          console.log('📊 更新呼吸波形，长度:', this.breathWaveform.length)
+          console.log('📊 更新呼吸波形（右→左），长度:', this.breathWaveform.length)
         } else if (breathValue !== undefined) {
-          this.breathWaveform.push(Number(breathValue))
+          this.breathWaveform.unshift(Number(breathValue))
           if (this.breathWaveform.length > 30) {
-            this.breathWaveform.shift()
+            this.breathWaveform.pop()
           }
-          console.log('📊 添加呼吸数据点，长度:', this.breathWaveform.length)
+          console.log('📊 添加呼吸数据点（右→左），长度:', this.breathWaveform.length)
         }
 
         // 3. 处理体动数据（固定字段）
@@ -1351,23 +1353,23 @@ export default {
         }
       }
 
-      // 确保数据长度为30，取最后30个点（最新的数据）
+      // 确保数据长度为30，取前30个点（最新的数据在开头）
       if (heartData.length > 30) {
-        heartData = heartData.slice(-30)
+        heartData = heartData.slice(0, 30)
       }
       if (breathData.length > 30) {
-        breathData = breathData.slice(-30)
+        breathData = breathData.slice(0, 30)
       }
 
-      // 填充不足的数据（在前面填充0）
-      while (heartData.length < 30) heartData.unshift(0)
-      while (breathData.length < 30) breathData.unshift(0)
+      // 填充不足的数据（在末尾填充0）
+      while (heartData.length < 30) heartData.push(0)
+      while (breathData.length < 30) breathData.push(0)
 
-      // 不再反转数据，直接使用从左到右的顺序（最新数据在右边）
+      // 从右往左显示：最新数据在左边（数组开头）
 
-      console.log('📊 更新ECharts图表数据:')
-      console.log('   处理后心率:', heartData.slice(-5))
-      console.log('   处理后呼吸:', breathData.slice(-5))
+      console.log('📊 更新ECharts图表数据（右→左）:')
+      console.log('   处理后心率:', heartData.slice(0, 5))
+      console.log('   处理后呼吸:', breathData.slice(0, 5))
 
       try {
         this.waveformChartInstance.setOption({
