@@ -148,13 +148,29 @@
           </div>
         </div>
 
-        <!-- 通知横幅 -->
-        <div class="notification-banner">
-          <el-icon class="banner-icon"><InfoFilled /></el-icon>
-          <span>示例通知信息</span>
-          <el-button type="text" size="small" class="close-banner">
-            <el-icon><Close /></el-icon>
-          </el-button>
+        <!-- 最近异常警告 (替代原来的通知横幅) -->
+        <div class="recent-alerts-card">
+          <div class="card-header-small">
+            <el-icon class="header-icon" color="#ef4444"><WarningFilled /></el-icon>
+            <span>最近异常警告</span>
+          </div>
+          
+          <div class="recent-alert-list" v-if="activeExceptions.length > 0">
+            <div 
+              v-for="exception in activeExceptions.slice(0, 10)" 
+              :key="exception.id" 
+              class="mini-alert-item clickable"
+              @click="goToAlertPage"
+            >
+              <span class="alert-time">{{ formatTimestamp(exception.timestamp) }}</span>
+              <span class="alert-desc">{{ exception.explanation }}</span>
+              <el-icon class="item-arrow"><ArrowRight /></el-icon>
+            </div>
+          </div>
+          <div class="empty-alert" v-else>
+            <el-icon color="#10b981"><CircleCheckFilled /></el-icon>
+            <span>当前系统运行正常，无异常警告</span>
+          </div>
         </div>
       </div>
 
@@ -309,14 +325,14 @@ import { getDevicePortConfig, getDeviceType } from '@/utils/deviceConfig'
 import * as echarts from 'echarts'
 import { 
   Monitor, Warning, User, Close, InfoFilled, More, Cpu, Setting, 
-  CircleCheck, Clock, Odometer, VideoPlay, VideoPause 
+  CircleCheck, Clock, Odometer, VideoPlay, VideoPause, WarningFilled, ArrowRight, CircleCheckFilled
 } from '@element-plus/icons-vue'
 
 export default {
   name: 'VitalMonitor',
   components: {
     Monitor, Warning, User, Close, InfoFilled, More, Cpu, Setting, 
-    CircleCheck, Clock, Odometer, VideoPlay, VideoPause
+    CircleCheck, Clock, Odometer, VideoPlay, VideoPause, WarningFilled, ArrowRight, CircleCheckFilled
   },
   data() {
     return {
@@ -598,6 +614,16 @@ export default {
       console.log(`设备 ${deviceId} 端口配置:`, config)
     },
     // 启动监测状态检测
+    startMonitoringStatusCheck() {
+      // ... existing code ...
+    },
+    
+    // 跳转到异常告警页面
+    goToAlertPage() {
+      this.$router.push('/alert/vitals')
+    },
+
+    // 切换监测状态
     startMonitoringStatusCheck() {
       // 启动数据接收超时检测
       this.startDataTimeoutCheck()
@@ -1446,6 +1472,7 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  height: 100%; /* 填满父容器高度 */
 }
 
 /* 图表卡片 */
@@ -1455,6 +1482,9 @@ export default {
   padding: 20px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.8);
+  /* flex: 1; Removed */
+  display: flex;
+  flex-direction: column;
 }
 
 .card-header {
@@ -1462,6 +1492,7 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
+  flex-shrink: 0; /* 防止头部被压缩 */
 }
 
 .card-header h3 {
@@ -1478,7 +1509,8 @@ export default {
 
 .waveform-container {
   width: 100%;
-  height: 350px;
+  /* flex: 1; Removed */
+  height: 350px; /* Fixed height */
 }
 
 /* 指标卡片网格 */
@@ -1573,6 +1605,107 @@ export default {
 }
 
 /* 异常告警面板 */
+.recent-alerts-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e5e7eb;
+  /* cursor: pointer; */
+  transition: all 0.3s ease;
+  /* margin-top: auto; Removed for consistency */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+
+.recent-alerts-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+  border-color: #fca5a5;
+}
+
+.card-header-small {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: #374151;
+  font-size: 15px;
+}
+
+.header-icon {
+  font-size: 18px;
+}
+
+.arrow-icon {
+  margin-left: auto;
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.recent-alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.mini-alert-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fef2f2;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #7f1d1d;
+}
+
+.mini-alert-item.clickable {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.mini-alert-item.clickable:hover {
+  background-color: #fee2e2;
+}
+
+.item-arrow {
+  margin-left: auto;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.alert-time {
+  color: #991b1b;
+  font-size: 12px;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.alert-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-alert {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: #ecfdf5;
+  border-radius: 6px;
+  color: #059669;
+  font-size: 13px;
+  flex: 1;
+}
+
 .alert-panel {
   background: rgba(255, 255, 255, 0.95);
   border-radius: 14px;
@@ -1654,27 +1787,9 @@ export default {
   font-weight: 500;
 }
 
-/* 通知横幅 */
-.notification-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 18px;
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  border-radius: 10px;
-  border: 1px solid #fbbf24;
-  color: #92400e;
-  font-size: 14px;
-}
-
-.banner-icon {
-  font-size: 20px;
-  color: #d97706;
-}
-
-.close-banner {
-  margin-left: auto;
-  color: #92400e;
+/* 通知横幅 - 已移除，样式保留以防万一 */
+.notification-banner-removed {
+  display: none;
 }
 
 /* 侧边面板 */
