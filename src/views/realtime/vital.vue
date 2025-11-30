@@ -1,5 +1,14 @@
 <template>
   <div class="vital-monitor-page">
+    <!-- 设备和人员选择器 -->
+    <DevicePersonSelector
+      v-model="currentDevice.id"
+      v-model:personId="currentPerson.id"
+      deviceTypeFilter="vital"
+      @device-change="handleDeviceSwitch"
+      @person-change="handlePersonSwitch"
+    />
+
     <!-- 顶部控制栏 -->
     <div class="monitor-header">
       <div class="header-info">
@@ -323,6 +332,7 @@ import { getPersonRealtimeData, createPersonDeviceMapping, getActivePersonDevice
 import { getTI6843DeviceRealtimeData, createTI6843VitalWebSocket } from '@/api/ti6843-vital'
 import { getDevicePortConfig, getDeviceType } from '@/utils/deviceConfig'
 import * as echarts from 'echarts'
+import DevicePersonSelector from '@/components/DevicePersonSelector.vue'
 import { 
   Monitor, Warning, User, Close, InfoFilled, More, Cpu, Setting, 
   CircleCheck, Clock, Odometer, VideoPlay, VideoPause, WarningFilled, ArrowRight, CircleCheckFilled
@@ -331,6 +341,7 @@ import {
 export default {
   name: 'VitalMonitor',
   components: {
+    DevicePersonSelector,
     Monitor, Warning, User, Close, InfoFilled, More, Cpu, Setting, 
     CircleCheck, Clock, Odometer, VideoPlay, VideoPause, WarningFilled, ArrowRight, CircleCheckFilled
   },
@@ -1412,6 +1423,87 @@ export default {
     dismissAllAlerts() {
       this.activeExceptions = []
       this.exceptionCount = 0
+    },
+
+    // ==================== 设备和人员切换处理 ====================
+    handleDeviceSwitch({ deviceId, device, personId }) {
+      console.log('🔄 切换到设备:', deviceId, '人员:', personId)
+      
+      // 停止当前订阅
+      if (this.currentDevice.id && this.currentDevice.id !== deviceId) {
+        dataManager.unsubscribeFromDevice(this.currentDevice.id, this.handleData)
+      }
+      
+      // 更新设备信息
+      this.currentDevice = {
+        id: deviceId,
+        name: device?.name || deviceId,
+        location: device?.location || '未知位置',
+        status: device?.status || 'offline'
+      }
+      
+      // 更新人员信息
+      if (personId) {
+        this.currentPerson = {
+          id: personId,
+          name: device?.personName || '未知用户'
+        }
+      } else {
+        this.currentPerson = {
+          id: '',
+          name: '未绑定人员'
+        }
+      }
+      
+      // 更新端口配置
+      this.updateDevicePortConfig(deviceId)
+      
+      // 订阅新设备数据
+      dataManager.subscribeToDevice(deviceId, this.handleData)
+      
+      // 尝试获取缓存数据
+      const cachedData = dataManager.getDeviceData(deviceId)
+      if (cachedData) {
+        console.log('📦 使用缓存数据初始化页面')
+        this.handleData(cachedData)
+      } else {
+        console.log('⏳ 等待设备数据...')
+        // 重置数据显示
+        this.breathRate = 0
+        this.heartRate = 0
+        this.motionValue = 0
+        this.breathWaveform = []
+        this.heartWaveform = []
+        this.motionWaveform = []
+      }
+      
+      // 更新页面标题
+      this.updatePageTitle()
+      
+      // 更新URL参数（不刷新页面）
+      this.$router.replace({
+        query: {
+          ...this.$route.query,
+          deviceId: deviceId,
+          deviceName: this.currentDevice.name,
+          deviceLocation: this.currentDevice.location,
+          personId: personId || undefined,
+          personName: this.currentPerson.name || undefined
+        }
+      })
+    },
+
+    handlePersonSwitch({ personId, person, deviceId }) {
+      console.log('🔄 切换到人员:', personId, '设备:', deviceId)
+      
+      // 人员切换会自动触发设备切换，由handleDeviceSwitch处理
+      if (person) {
+        this.currentPerson = {
+          id: personId,
+          name: person.name || personId
+        }
+        this.updatePageTitle()
+      }
     }
   }
 }
@@ -1422,6 +1514,9 @@ export default {
   min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fb 0%, #e8eef5 100%);
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* 顶部控制栏 */
@@ -1429,7 +1524,6 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
   padding: 20px 24px;
   background: rgba(255, 255, 255, 0.95);
   border-radius: 16px;

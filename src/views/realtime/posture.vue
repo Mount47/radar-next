@@ -1,5 +1,14 @@
 <template>
   <div class="posture-monitor-page">
+    <!-- 设备和人员选择器 -->
+    <DevicePersonSelector
+      v-model="currentDevice.deviceId"
+      v-model:personId="currentPerson.id"
+      deviceTypeFilter="posture"
+      @device-change="handleDeviceSwitch"
+      @person-change="handlePersonSwitch"
+    />
+
     <!-- 顶部控制栏 -->
     <div class="monitor-header">
       <div class="header-info">
@@ -369,6 +378,7 @@ import {
 } from '@/api/fall-alert'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
+import DevicePersonSelector from '@/components/DevicePersonSelector.vue'
 import { 
   VideoPlay, VideoPause, Clock, Refresh, ArrowDown, View, Grid, LocationFilled,
   Warning, User, InfoFilled, Close, More, Cpu, Monitor, Setting, 
@@ -378,6 +388,7 @@ import {
 export default {
   name: 'PostureMonitor',
   components: {
+    DevicePersonSelector,
     VideoPlay, VideoPause, Clock, Refresh, ArrowDown, View, Grid, LocationFilled,
     Warning, User, InfoFilled, Close, More, Cpu, Monitor, Setting, 
     CircleCheck, Coordinate, QuestionFilled, WarningFilled, ArrowRight, CircleCheckFilled
@@ -2129,6 +2140,88 @@ export default {
         FALSE_ALARM: 'el-icon-circle-close'
       }
       return map[status] || 'el-icon-more'
+    },
+
+    // ==================== 设备和人员切换处理 ====================
+    handleDeviceSwitch({ deviceId, device, personId }) {
+      console.log('🔄 切换到设备:', deviceId, '人员:', personId)
+      
+      // 停止当前监测
+      if (this.isMonitoring) {
+        this.disconnectWebSocket()
+      }
+      
+      // 更新设备信息
+      this.currentDevice = {
+        deviceId: deviceId,
+        name: device?.name || deviceId,
+        location: device?.location || '未知位置',
+        modelType: 'TI6843_POSTURE',
+        type: 'posture_sensor',
+        status: device?.status || 'offline',
+        createdAt: null,
+        updatedAt: null
+      }
+      
+      // 更新人员信息
+      if (personId) {
+        this.currentPerson = {
+          id: personId,
+          name: device?.personName || '未知用户'
+        }
+      } else {
+        this.currentPerson = {
+          id: '',
+          name: '未绑定人员'
+        }
+      }
+      
+      // 清除当前数据
+      this.pointClouds = []
+      this.keypoints = []
+      this.postureStatus = 'unknown'
+      this.displayPoints = []
+      
+      // 清除3D场景
+      if (this.pointCloudsGroup) {
+        this.clearGroup(this.pointCloudsGroup)
+      }
+      if (this.keypointsGroup) {
+        this.clearGroup(this.keypointsGroup)
+      }
+      
+      // 更新页面标题
+      this.updatePageTitle()
+      
+      // 更新URL参数（不刷新页面）
+      this.$router.replace({
+        query: {
+          ...this.$route.query,
+          deviceId: deviceId,
+          deviceName: this.currentDevice.name,
+          deviceLocation: this.currentDevice.location,
+          personId: personId || undefined,
+          personName: this.currentPerson.name || undefined
+        }
+      })
+      
+      // 重新建立连接
+      if (this.isMonitoring) {
+        this.connectWebSocket()
+      }
+    },
+
+    handlePersonSwitch({ personId, person, deviceId }) {
+      console.log('🔄 切换到人员:', personId, '设备:', deviceId)
+      
+      // 人员切换会自动触发设备切换，由handleDeviceSwitch处理
+      if (person) {
+        this.currentPerson = {
+          id: personId,
+          name: person.name || personId
+        }
+        this.updatePageTitle()
+      }
     }
   }
 }
@@ -2139,6 +2232,9 @@ export default {
   min-height: 100vh;
   background: linear-gradient(135deg, #f5f7fb 0%, #e8eef5 100%);
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* 顶部控制栏 */
@@ -2146,7 +2242,6 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
   padding: 20px 24px;
   background: rgba(255, 255, 255, 0.95);
   border-radius: 16px;

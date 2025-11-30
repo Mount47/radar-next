@@ -55,6 +55,7 @@ class DataManager extends SimpleEventEmitter {
     this.heartbeatTimeout = 30000 // 30秒心跳间隔
     this.defaultConnectionKeys = ['R60ABD1', 'TI6843_VITAL'] // 默认同时监听R60和TI6843呼吸心跳
     this.deviceSubscriptions = new Map() // 设备订阅管理 {deviceId: Set of callback functions}
+    this.deviceDataCache = new Map() // 每个设备的最新数据缓存 {deviceId: latestData}
   }
 
   // 添加isConnected getter，保持向后兼容
@@ -69,6 +70,17 @@ class DataManager extends SimpleEventEmitter {
     }
     this.deviceSubscriptions.get(deviceId).add(callback)
     console.log(`📝 设备 ${deviceId} 添加订阅，当前订阅数量: ${this.deviceSubscriptions.get(deviceId).size}`)
+    
+    // 如果有缓存数据，立即发送给新订阅者
+    if (this.deviceDataCache.has(deviceId)) {
+      const cachedData = this.deviceDataCache.get(deviceId)
+      console.log(`📦 向新订阅者发送设备 ${deviceId} 的缓存数据`)
+      try {
+        callback(cachedData)
+      } catch (error) {
+        console.error(`❌ 发送缓存数据失败:`, error)
+      }
+    }
   }
 
   // 取消特定设备的数据订阅
@@ -79,6 +91,32 @@ class DataManager extends SimpleEventEmitter {
         this.deviceSubscriptions.delete(deviceId)
       }
       console.log(`📝 设备 ${deviceId} 移除订阅`)
+    }
+  }
+
+  // 获取设备的缓存数据
+  getDeviceData(deviceId) {
+    return this.deviceDataCache.get(deviceId) || null
+  }
+
+  // 获取所有设备的缓存数据
+  getAllDeviceData() {
+    return Array.from(this.deviceDataCache.entries()).map(([deviceId, data]) => ({
+      deviceId,
+      data,
+      timestamp: data.timestamp,
+      lastUpdate: new Date(data.timestamp).toLocaleString()
+    }))
+  }
+
+  // 清除设备缓存数据
+  clearDeviceCache(deviceId) {
+    if (deviceId) {
+      this.deviceDataCache.delete(deviceId)
+      console.log(`🗑️ 清除设备 ${deviceId} 的缓存数据`)
+    } else {
+      this.deviceDataCache.clear()
+      console.log(`🗑️ 清除所有设备的缓存数据`)
     }
   }
 
@@ -387,6 +425,12 @@ class DataManager extends SimpleEventEmitter {
       
       // 获取数据对应的设备ID
       const dataDeviceId = processedData.deviceId
+      
+      // 缓存设备数据
+      if (dataDeviceId) {
+        this.deviceDataCache.set(dataDeviceId, processedData)
+        console.log(`💾 缓存设备 ${dataDeviceId} 的数据`)
+      }
       
       // 向特定设备的订阅者发送数据（支持智能模糊匹配）
       let foundSubscribers = false

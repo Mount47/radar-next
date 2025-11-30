@@ -8,6 +8,13 @@ export default defineConfig({
   plugins: [
     vue(),
   ],
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'modern-compiler' // 使用现代 Sass API
+      }
+    }
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
