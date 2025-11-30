@@ -92,7 +92,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, getCurrentInstance } from 'vue'
 import { Cpu, User, Monitor } from '@element-plus/icons-vue'
 import { getDevices } from '@/api/devices/device'
 import { getPersons } from '@/api/persons/person'
@@ -340,10 +340,27 @@ export default {
       }
     }
 
+    // 刷新设备列表
+    const refreshDeviceList = async () => {
+      console.log('🔄 刷新设备列表...')
+      await Promise.all([
+        fetchDevices(),
+        fetchPersons(),
+        fetchMappings()
+      ])
+      console.log('✅ 设备列表刷新完成')
+    }
+
     // 初始化
     onMounted(async () => {
       // 先监听数据更新，这样可以捕获早期的数据
       dataManager.on('dataUpdate', handleDataUpdate)
+      
+      // 监听刷新设备列表事件
+      const currentInstance = getCurrentInstance()
+      if (currentInstance) {
+        currentInstance.appContext.config.globalProperties.$root.$on('refresh-device-list', refreshDeviceList)
+      }
       
       await Promise.all([
         fetchDevices(),

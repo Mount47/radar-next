@@ -28,7 +28,7 @@
           >
             {{ isMonitoring ? '停止监测' : '开始监测' }}
           </el-button>
-          <el-button @click="showHistory" icon="Clock">历史数据</el-button>
+          <el-button @click="refreshDeviceStatus" icon="Refresh">刷新状态</el-button>
         </el-button-group>
       </div>
     </div>
@@ -335,7 +335,7 @@ import * as echarts from 'echarts'
 import DevicePersonSelector from '@/components/DevicePersonSelector.vue'
 import { 
   Monitor, Warning, User, Close, InfoFilled, More, Cpu, Setting, 
-  CircleCheck, Clock, Odometer, VideoPlay, VideoPause, WarningFilled, ArrowRight, CircleCheckFilled
+  CircleCheck, Clock, Odometer, VideoPlay, VideoPause, WarningFilled, ArrowRight, CircleCheckFilled, Refresh
 } from '@element-plus/icons-vue'
 
 export default {
@@ -343,7 +343,7 @@ export default {
   components: {
     DevicePersonSelector,
     Monitor, Warning, User, Close, InfoFilled, More, Cpu, Setting, 
-    CircleCheck, Clock, Odometer, VideoPlay, VideoPause, WarningFilled, ArrowRight, CircleCheckFilled
+    CircleCheck, Clock, Odometer, VideoPlay, VideoPause, WarningFilled, ArrowRight, CircleCheckFilled, Refresh
   },
   data() {
     return {
@@ -724,16 +724,31 @@ export default {
         this.startMonitoring()
       }
     },
-    showHistory() {
-      const query = {}
-      // 优先 personId，其次 deviceId
-      if (this.currentPerson && this.currentPerson.id) query.personId = this.currentPerson.id
-      if (this.currentDevice && this.currentDevice.id) query.deviceId = this.currentDevice.id
-      if (Object.keys(query).length === 0) {
-        showGlobalError('缺少人员或设备标识，无法查看历史数据')
-        return
+    async refreshDeviceStatus() {
+      console.log('🔄 开始刷新设备状态...')
+      
+      try {
+        // 显示加载提示
+        const loadingInstance = this.$loading({
+          lock: true,
+          text: '正在刷新设备状态...',
+          background: 'rgba(0, 0, 0, 0.7)'
+        })
+
+        // 触发DevicePersonSelector组件重新获取设备列表
+        // 通过发射事件来通知子组件刷新
+        this.$root.$emit('refresh-device-list')
+        
+        // 等待一小段时间让数据更新
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        loadingInstance.close()
+        this.$message.success('设备状态已刷新')
+        console.log('✅ 设备状态刷新完成')
+      } catch (error) {
+        console.error('❌ 刷新设备状态失败:', error)
+        this.$message.error('刷新失败，请稍后再试')
       }
-      this.$router.push({ name: 'HistoryIndex', query })
     },
     handleConnectionChange(isConnected) {
       this.connectionStatus = isConnected ? 'connected' : 'disconnected'
@@ -958,15 +973,15 @@ export default {
         }
         // 优先使用波形数据，如果不存在则使用单个速率值
         if (data.heartRateWave && Array.isArray(data.heartRateWave)) {
-          this.heartWaveform.unshift(...data.heartRateWave)
+          this.heartWaveform.push(...data.heartRateWave)
           if (this.heartWaveform.length > 100) {
-            this.heartWaveform.splice(100)
+            this.heartWaveform.splice(0, this.heartWaveform.length - 100)
           }
           console.log('📊 更新心率波形，长度:', this.heartWaveform.length)
         } else if (data.heartRate !== undefined) {
-          this.heartWaveform.unshift(Number(data.heartRate))
+          this.heartWaveform.push(Number(data.heartRate))
           if (this.heartWaveform.length > 30) {
-            this.heartWaveform.splice(30)
+            this.heartWaveform.shift()
           }
           console.log('📊 添加心率数据点，长度:', this.heartWaveform.length)
         }
@@ -984,15 +999,15 @@ export default {
         // 优先使用波形数据，如果不存在则使用单个速率值
         const breathValue = data.respiration || data.breathRate
         if (data.respirationWave && Array.isArray(data.respirationWave)) {
-          this.breathWaveform.unshift(...data.respirationWave)
+          this.breathWaveform.push(...data.respirationWave)
           if (this.breathWaveform.length > 100) {
-            this.breathWaveform.splice(100)
+            this.breathWaveform.splice(0, this.breathWaveform.length - 100)
           }
           console.log('📊 更新呼吸波形，长度:', this.breathWaveform.length)
         } else if (breathValue !== undefined) {
-          this.breathWaveform.unshift(Number(breathValue))
+          this.breathWaveform.push(Number(breathValue))
           if (this.breathWaveform.length > 30) {
-            this.breathWaveform.splice(30)
+            this.breathWaveform.shift()
           }
           console.log('📊 添加呼吸数据点，长度:', this.breathWaveform.length)
         }
@@ -1000,9 +1015,9 @@ export default {
         // 3. 处理体动数据（固定字段）
         if (data.bodyMovement !== undefined && data.bodyMovement !== null) {
           this.motionValue = Number(data.bodyMovement)
-          this.motionWaveform.unshift(this.motionValue)
+          this.motionWaveform.push(this.motionValue)
           if (this.motionWaveform.length > 30) {
-            this.motionWaveform.pop()
+            this.motionWaveform.shift()
           }
           // console.log('✅ 体动:', this.motionValue)
         }
@@ -1336,17 +1351,19 @@ export default {
         }
       }
 
-      // 确保数据长度为30
-      heartData = heartData.slice(0, 30)
-      breathData = breathData.slice(0, 30)
+      // 确保数据长度为30，取最后30个点（最新的数据）
+      if (heartData.length > 30) {
+        heartData = heartData.slice(-30)
+      }
+      if (breathData.length > 30) {
+        breathData = breathData.slice(-30)
+      }
 
-      // 填充不足的数据
+      // 填充不足的数据（在前面填充0）
       while (heartData.length < 30) heartData.unshift(0)
       while (breathData.length < 30) breathData.unshift(0)
 
-      // 反转数据,最新的在右边
-      heartData.reverse()
-      breathData.reverse()
+      // 不再反转数据，直接使用从左到右的顺序（最新数据在右边）
 
       console.log('📊 更新ECharts图表数据:')
       console.log('   处理后心率:', heartData.slice(-5))
