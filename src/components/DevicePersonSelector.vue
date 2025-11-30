@@ -70,7 +70,7 @@
         </el-option>
         <template #empty>
           <div class="empty-text">
-            {{ hasBindings ? '暂无人员绑定' : '当前设备未绑定人员' }}
+            {{ hasBindings ? '暂无人员数据' : '当前无人员实时数据' }}
           </div>
         </template>
       </el-select>
@@ -138,7 +138,25 @@ export default {
 
     // 设备选项
     const deviceOptions = computed(() => {
-      let devices = deviceList.value
+      // 合并API设备列表和WebSocket数据缓存中的设备
+      const allDeviceIds = new Set([
+        ...deviceList.value.map(d => d.id),
+        ...Object.keys(deviceDataCache.value)
+      ])
+
+      let devices = Array.from(allDeviceIds).map(deviceId => {
+        const apiDevice = deviceList.value.find(d => d.id === deviceId)
+        const cache = deviceDataCache.value[deviceId]
+        
+        // 优先使用API设备信息，如果不存在则从缓存创建
+        return {
+          id: deviceId,
+          name: apiDevice?.name || apiDevice?.deviceName || cache?.deviceName || deviceId,
+          location: apiDevice?.location || cache?.location || '未知位置',
+          status: cache?.status === 'online' ? 'online' : (apiDevice?.status || 'offline'),
+          lastUpdate: cache?.timestamp || apiDevice?.lastUpdate
+        }
+      })
 
       // 根据设备类型过滤
       if (props.deviceTypeFilter) {
@@ -172,19 +190,36 @@ export default {
       })
     })
 
-    // 人员选项（带设备绑定信息）
+    // 人员选项（只显示有实时数据的人员）
     const personOptions = computed(() => {
-      return personList.value.map(person => {
+      // 从WebSocket数据缓存中提取所有有数据的personId
+      const activePersonIds = new Set()
+      Object.values(deviceDataCache.value).forEach(cache => {
+        if (cache.personId && cache.personId.trim() !== '') {
+          activePersonIds.add(cache.personId)
+        }
+      })
+
+      // 只返回有实时数据的人员
+      const activePersons = personList.value.filter(person => 
+        activePersonIds.has(person.id)
+      )
+
+      return activePersons.map(person => {
         // 查找该人员的绑定关系
         const mapping = mappingList.value.find(m => m.personId === person.id)
         const device = deviceList.value.find(d => d.id === mapping?.deviceId)
         
+        // 优先使用 person.name，其次 person.personName，最后使用 person.id
+        const personName = person.name || person.personName || `人员-${person.id}`
+        const deviceName = device?.name || device?.deviceName || mapping?.deviceId || '未知设备'
+        
         return {
           id: person.id,
-          name: person.name || `人员-${person.id}`,
+          name: personName,
           deviceId: mapping?.deviceId,
-          deviceName: device?.name || mapping?.deviceId,
-          label: `${person.name || person.id}${device ? ` (${device.name})` : ''}`
+          deviceName: deviceName,
+          label: `${personName}${device ? ` (${device.name || device.id})` : ''}`
         }
       })
     })
@@ -194,9 +229,9 @@ export default {
       return deviceOptions.value.filter(d => d.status === 'online').length
     })
 
-    // 是否有绑定关系
+    // 是否有绑定关系（基于实际有数据的人员）
     const hasBindings = computed(() => {
-      return mappingList.value.length > 0
+      return personOptions.value.length > 0
     })
 
     // 获取设备状态类型
@@ -307,20 +342,29 @@ export default {
 
     // 初始化
     onMounted(async () => {
+      // 先监听数据更新，这样可以捕获早期的数据
+      dataManager.on('dataUpdate', handleDataUpdate)
+      
       await Promise.all([
         fetchDevices(),
         fetchPersons(),
         fetchMappings()
       ])
 
-      // 监听数据更新
-      dataManager.on('dataUpdate', handleDataUpdate)
+      // 等待一小段时间让WebSocket数据到达
+      await new Promise(resolve => setTimeout(resolve, 500))
 
-      // 如果没有选中设备，自动选中第一个在线设备
+      // 如果没有选中设备，自动选中第一个有数据的设备
       if (!selectedDeviceId.value && deviceOptions.value.length > 0) {
-        const firstOnline = deviceOptions.value.find(d => d.status === 'online')
+        // 优先选择有数据缓存的在线设备
+        const devicesWithData = deviceOptions.value.filter(d => 
+          deviceDataCache.value[d.id] && d.status === 'online'
+        )
+        const firstOnline = devicesWithData[0] || deviceOptions.value.find(d => d.status === 'online')
         const firstDevice = firstOnline || deviceOptions.value[0]
+        
         if (firstDevice) {
+          console.log('🎯 自动选择设备:', firstDevice.id, '状态:', firstDevice.status)
           selectedDeviceId.value = firstDevice.id
           handleDeviceChange(firstDevice.id)
         }

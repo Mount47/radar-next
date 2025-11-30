@@ -1313,9 +1313,32 @@ export default {
         return
       }
 
-      // 确保数据长度一致
-      const heartData = this.heartWaveform.slice(0, 30)
-      const breathData = this.breathWaveform.slice(0, 30)
+      // 确保数据是数组且不为空
+      let heartData = Array.isArray(this.heartWaveform) ? [...this.heartWaveform] : []
+      let breathData = Array.isArray(this.breathWaveform) ? [...this.breathWaveform] : []
+
+      console.log('📊 原始波形数据:')
+      console.log('   心率波形长度:', heartData.length, '数据:', heartData.slice(0, 5))
+      console.log('   呼吸波形长度:', breathData.length, '数据:', breathData.slice(0, 5))
+
+      // 如果数据为空或全部为0，使用当前速率值
+      if (heartData.length === 0 || heartData.every(v => v === 0)) {
+        if (this.heartRate > 0) {
+          heartData = Array(30).fill(this.heartRate)
+          console.log('⚠️ 心率波形为空，使用当前速率值填充:', this.heartRate)
+        }
+      }
+
+      if (breathData.length === 0 || breathData.every(v => v === 0)) {
+        if (this.breathRate > 0) {
+          breathData = Array(30).fill(this.breathRate)
+          console.log('⚠️ 呼吸波形为空，使用当前速率值填充:', this.breathRate)
+        }
+      }
+
+      // 确保数据长度为30
+      heartData = heartData.slice(0, 30)
+      breathData = breathData.slice(0, 30)
 
       // 填充不足的数据
       while (heartData.length < 30) heartData.unshift(0)
@@ -1326,17 +1349,20 @@ export default {
       breathData.reverse()
 
       console.log('📊 更新ECharts图表数据:')
-      console.log('   心率数据:', heartData)
-      console.log('   呼吸数据:', breathData)
+      console.log('   处理后心率:', heartData.slice(-5))
+      console.log('   处理后呼吸:', breathData.slice(-5))
 
-      this.waveformChartInstance.setOption({
-        series: [
-          { data: heartData },
-          { data: breathData }
-        ]
-      })
-      
-      console.log('✅ ECharts图表更新完成')
+      try {
+        this.waveformChartInstance.setOption({
+          series: [
+            { data: heartData },
+            { data: breathData }
+          ]
+        }, false, true) // notMerge=false, lazyUpdate=true
+        console.log('✅ ECharts图表更新完成')
+      } catch (error) {
+        console.error('❌ ECharts更新失败:', error)
+      }
     },
 
     handleChartResize() {
