@@ -1,466 +1,615 @@
 <template>
-  <div class="app-container">
-    <h1>ECG Monitor</h1>
-    
-    <div class="debug-info">
-      <h2>Device Info</h2>
-      <pre>{{ deviceInfo }}</pre>
+  <div class="ecg-monitor-page">
+    <!-- 设备和人员选择器 -->
+    <DevicePersonSelector
+      v-model="deviceId"
+      v-model:personId="personId"
+      @device-change="handleDeviceChange"
+      @person-change="handlePersonChange"
+    />
+
+    <!-- 顶部控制栏 -->
+    <div class="monitor-header">
+      <div class="header-info">
+        <h1 class="page-title">ECG 实时监测</h1>
+        <div class="status-badges">
+          <el-tag :type="isConnected ? 'success' : 'danger'" size="large">
+            {{ isConnected ? 'WebSocket 已连接' : 'WebSocket 未连接' }}
+          </el-tag>
+          <el-tag v-if="isConnected" type="info" class="ml-2">延迟: {{ latency }}ms</el-tag>
+        </div>
+      </div>
+      <div class="header-actions">
+        <el-radio-group v-model="timeWindow" size="default" @change="handleTimeWindowChange">
+          <el-radio-button :label="5">5秒</el-radio-button>
+          <el-radio-button :label="10">10秒</el-radio-button>
+          <el-radio-button :label="30">30秒</el-radio-button>
+        </el-radio-group>
+        <el-button 
+          :type="isPaused ? 'primary' : 'danger'" 
+          @click="togglePause"
+          :icon="isPaused ? 'VideoPlay' : 'VideoPause'"
+          class="ml-2"
+        >
+          {{ isPaused ? '继续' : '暂停' }}
+        </el-button>
+      </div>
     </div>
 
-    <div class="debug-info">
-      <h2>ECG Data</h2>
-      <p>Rate: {{ ecgRate }}</p>
-      <p>Status: {{ ecgStatus }}</p>
-      <p>Data Points: {{ ecgWaveform.length }}</p>
-      <p>Last Update: {{ lastUpdateTime }}</p>
-    </div>
+    <!-- 主内容区域 -->
+    <div class="monitor-content">
+      <!-- 左侧：波形图 -->
+      <div class="main-panel">
+        <div class="chart-card">
+          <div class="card-header">
+            <h3>实时心电图 (Lead I)</h3>
+            <span class="last-update">最后更新: {{ formatTime(currentMetrics.timestamp) }}</span>
+          </div>
+          <div ref="chartRef" class="waveform-container"></div>
+        </div>
+      </div>
 
-    <div class="debug-info">
-      <h2>Stats</h2>
-      <pre>{{ historyStats }}</pre>
+      <!-- 右侧：实时指标 -->
+      <div class="metrics-grid">
+        <div class="metric-card heart-card">
+          <div class="metric-header">
+            <el-icon class="metric-icon" :size="32" color="#f87171">
+              <Monitor />
+            </el-icon>
+            <span class="metric-title">心率</span>
+          </div>
+          <div class="metric-value-large" :class="getHeartRateClass(currentMetrics.heartRate)">
+            {{ currentMetrics.heartRate || '--' }} <span class="unit">bpm</span>
+          </div>
+          <div class="metric-footer">
+            <span class="status-indicator" :class="getHeartRateStatusClass(currentMetrics.heartRate)">
+              {{ getHeartRateStatusText(currentMetrics.heartRate) }}
+            </span>
+          </div>
+        </div>
+
+        <div class="metric-card signal-card">
+          <div class="metric-header">
+            <el-icon class="metric-icon" :size="32" color="#a5b4fc">
+              <Connection />
+            </el-icon>
+            <span class="metric-title">信号质量</span>
+          </div>
+          <div class="metric-value-large">
+            {{ currentMetrics.signalQuality || 0 }} <span class="unit">%</span>
+          </div>
+          <div class="metric-footer">
+            <el-progress 
+              :percentage="currentMetrics.signalQuality || 0" 
+              :color="signalQualityColor"
+              :show-text="false"
+              :stroke-width="6"
+            />
+            <div class="mt-1 text-sm">{{ currentMetrics.signalQualityStatus || '未知' }}</div>
+          </div>
+        </div>
+
+        <div class="metric-card info-card">
+          <div class="metric-header">
+            <el-icon class="metric-icon" :size="32" color="#34d399">
+              <DataLine />
+            </el-icon>
+            <span class="metric-title">采样率</span>
+          </div>
+          <div class="metric-value-large">
+            {{ currentMetrics.samplingRate || '--' }} <span class="unit">Hz</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
-<script>
-// import WaveformChart from '@/components/WaveformChart'
-// TODO: ECG API 暂未设计完成，暂时注释掉
-import { mapState, mapActions } from 'pinia'
-import { useDeviceStore } from '@/stores/device'
-import { useStatsStore } from '@/stores/stats'
+<script setup>
+import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
+import * as echarts from 'echarts'
+import DevicePersonSelector from '@/components/DevicePersonSelector.vue'
+import { Monitor, Connection, DataLine, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 
-export default {
-  name: 'ECGView',
-  // components: { WaveformChart },
-  data() {
-    return {
-      deviceId: 'RD003', // 默认设备ID
-      deviceInfo: {
-        deviceName: '',
-        location: '',
-        status: '',
-        model: '',
-        type: ''
-      },
-      currentPerson: {
-        id: '',
-        name: '未知用户'
-      },
-      mappingInfo: {
-        name: '默认映射'
-      },
-      loading: false,
-      ecgWaveform: [],
-      ecgStatus: 'normal',
-      ecgRate: 0,
-      lastUpdateTime: '',
-      refreshTimer: null,
-      initialDataLoaded: false, // 标记初次数据加载
-      // 心率异常统计数据
-      historyStats: [
-        {
-          name: '心动过速',
-          count: '0次',
-          duration: '总持续时间: 0min',
-          type: 'danger',
-          tagType: 'danger'
-        },
-        {
-          name: '心动过缓',
-          count: '0次',
-          duration: '总持续时间: 0min',
-          type: 'warning',
-          tagType: 'warning'
-        },
-        {
-          name: '心律不齐',
-          count: '0次',
-          duration: '总持续时间: 0min',
-          type: 'normal',
-          tagType: 'info'
-        }
-      ]
-    }
-  },
-  computed: {
-    ...mapState(useDeviceStore, ['currentDeviceId']),
-    // ...mapGetters([
-    //   'sidebar',
-    //   'device'
-    // ]),
-    // eslint-disable-next-line no-unused-vars
-    globalStats() {
-      const statsStore = useStatsStore()
-      return statsStore.ecgStats || {}
-    }
-  },
-  watch: {
-    // 监听Vuex中的当前设备ID变化
-    currentDeviceId: {
-      handler(newId) {
-        if (newId && newId !== this.deviceId) {
-          // 更新本地设备ID并重新获取数据
-          this.deviceId = newId
-          this.fetchECGData()
-        }
-      },
-      immediate: true
+// 状态变量
+const deviceId = ref('')
+const personId = ref('')
+const isConnected = ref(false)
+const latency = ref(0)
+const isPaused = ref(false)
+const timeWindow = ref(10) // 秒
+const chartRef = ref(null)
+let chartInstance = null
+let ws = null
+let heartbeatInterval = null
+
+// 数据缓存
+const ecgDataQueue = ref([])
+const maxDataPoints = computed(() => timeWindow.value * 250) // 假设250Hz采样率
+
+// 当前指标
+const currentMetrics = ref({
+  heartRate: 0,
+  signalQuality: 0,
+  signalQualityStatus: '',
+  samplingRate: 0,
+  timestamp: null
+})
+
+// WebSocket URL
+const WS_URL = 'ws://localhost:8080/ws/ecg'
+
+// 初始化图表
+const initChart = () => {
+  if (chartRef.value) {
+    chartInstance = echarts.init(chartRef.value)
+    updateChartOption()
+    window.addEventListener('resize', resizeChart)
+  }
+}
+
+const resizeChart = () => {
+  chartInstance?.resize()
+}
+
+const updateChartOption = () => {
+  if (!chartInstance) return
+
+  const now = new Date().getTime()
+  const startTime = now - timeWindow.value * 1000
+
+  const option = {
+    grid: {
+      top: 30,
+      right: 20,
+      bottom: 30,
+      left: 50,
+      show: true, // 显示网格背景
+      borderColor: '#eee'
     },
-    // 监听全局统计数据变化
-    globalStats: {
-      handler(newStats) {
-        if (newStats && Object.keys(newStats).length > 0) {
-          this.updateHistoryStats(newStats)
+    xAxis: {
+      type: 'time',
+      boundaryGap: false,
+      min: startTime,
+      max: now,
+      splitLine: {
+        show: true,
+        lineStyle: {
+          color: '#eee'
         }
       },
-      deep: true,
-      immediate: true
-    }
-  },
-  mounted() {
-    // 从路由参数获取设备和人员信息
-    const deviceName = this.$route.query.deviceName || '雷达设备'
-    const deviceLocation = this.$route.query.deviceLocation || '默认位置'
-    const personId = this.$route.query.personId || ''
-    const personName = this.$route.query.personName || '未知用户'
-    const mappingName = this.$route.query.mappingName || '默认映射'
-
-    // 如果路由参数中有设备ID，更新设备ID
-    if (this.$route.query.deviceId) {
-      this.deviceId = this.$route.query.deviceId
-      // 如果当前设备ID与Vuex中不一致，并且Vuex中存在currentDeviceId，则更新Vuex
-      if (this.currentDeviceId && this.$route.query.deviceId !== this.currentDeviceId) {
-        this.setCurrentDevice(this.$route.query.deviceId)
+      axisLabel: {
+        show: false
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#ddd'
+        }
       }
+    },
+    yAxis: {
+      type: 'value',
+      min: -1.5, // 固定最小值
+      max: 1.5,  // 固定最大值
+      splitLine: {
+        show: true,
+        lineStyle: {
+          color: '#eee'
+        }
+      },
+      name: 'mV',
+      nameTextStyle: {
+        color: '#666'
+      },
+      axisLabel: {
+        color: '#666'
+      }
+    },
+    series: [{
+      name: 'ECG',
+      type: 'line',
+      showSymbol: false,
+      hoverAnimation: false,
+      data: [], // 初始化为空
+      lineStyle: {
+        width: 2,
+        color: '#ef4444' // 红色心电线
+      },
+      animation: false // 禁用动画以提高性能
+    }]
+  }
+  chartInstance.setOption(option)
+}
+
+// WebSocket 连接管理
+const connectWebSocket = () => {
+  if (ws) {
+    ws.close()
+  }
+
+  ws = new WebSocket(WS_URL)
+
+  ws.onopen = () => {
+    console.log('ECG WebSocket Connected')
+    isConnected.value = true
+    subscribeToData()
+    startHeartbeat()
+  }
+
+  ws.onmessage = (event) => {
+    try {
+      const message = JSON.parse(event.data)
+      handleWebSocketMessage(message)
+    } catch (e) {
+      console.error('Failed to parse WebSocket message', e)
+    }
+  }
+
+  ws.onclose = () => {
+    console.log('ECG WebSocket Closed')
+    isConnected.value = false
+    stopHeartbeat()
+    // 尝试重连
+    setTimeout(connectWebSocket, 5000)
+  }
+
+  ws.onerror = (error) => {
+    console.error('ECG WebSocket Error', error)
+    isConnected.value = false
+  }
+}
+
+const subscribeToData = () => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return
+
+  if (deviceId.value) {
+    ws.send(JSON.stringify({
+      action: 'subscribe',
+      type: 'device',
+      id: deviceId.value
+    }))
+  } else if (personId.value) {
+    ws.send(JSON.stringify({
+      action: 'subscribe',
+      type: 'person',
+      id: personId.value
+    }))
+  }
+}
+
+const handleWebSocketMessage = (message) => {
+  if (message.type === 'pong') {
+    return
+  }
+
+  if (message.type === 'ecg_realtime_data' || message.type === 'ecg_device_data' || message.type === 'ecg_person_data') {
+    if (isPaused.value) return
+
+    const data = message.data
+    
+    currentMetrics.value = {
+      heartRate: data.heartRate,
+      signalQuality: data.signalQuality,
+      signalQualityStatus: data.signalQualityStatus,
+      samplingRate: data.samplingRate,
+      timestamp: data.timestamp
     }
 
-    // 设置初始设备信息
-    this.deviceInfo = {
-      deviceName: deviceName,
-      location: deviceLocation,
-      status: '在线'
+    const timestamp = new Date(data.timestamp).getTime()
+    const value = data.ecgValue
+
+    ecgDataQueue.value.push({ timestamp, value })
+
+    // 保持窗口大小
+    const windowStartTime = Date.now() - (timeWindow.value * 1000)
+    if (ecgDataQueue.value.length > 0 && ecgDataQueue.value[0].timestamp < windowStartTime) {
+       const index = ecgDataQueue.value.findIndex(item => item.timestamp >= windowStartTime)
+       if (index > 0) {
+         ecgDataQueue.value.splice(0, index)
+       }
+    }
+    
+    if (ecgDataQueue.value.length > maxDataPoints.value * 1.5) {
+      ecgDataQueue.value.splice(0, ecgDataQueue.value.length - maxDataPoints.value)
     }
 
-    // 设置人员信息
-    this.currentPerson = {
-      id: personId,
-      name: personName
+    requestAnimationFrame(() => {
+        if (chartInstance) {
+            const now = Date.now()
+            chartInstance.setOption({
+                xAxis: {
+                    min: now - timeWindow.value * 1000,
+                    max: now
+                },
+                series: [{
+                    data: ecgDataQueue.value.map(item => [item.timestamp, item.value])
+                }]
+            })
+        }
+    })
+  }
+}
+
+const startHeartbeat = () => {
+  stopHeartbeat()
+  heartbeatInterval = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ action: 'ping' }))
     }
+  }, 30000)
+}
 
-    // 设置映射信息
-    this.mappingInfo = {
-      name: mappingName
-    }
+const stopHeartbeat = () => {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval)
+    heartbeatInterval = null
+  }
+}
 
-    // 如果有人员信息，更新页面标题
-    if (personName && personName !== '未知用户') {
-      document.title = `${personName} - 心电监测 - 雷达监测系统`
-    }
+const handleDeviceChange = (newId) => {
+  ecgDataQueue.value = []
+  subscribeToData()
+}
 
-    console.log('ECG页面 - 初始化')
-    console.log('ECG页面 - 设备ID:', this.deviceId)
-    console.log('ECG页面 - 设备名称:', deviceName)
-    console.log('ECG页面 - 人员ID:', personId)
-    console.log('ECG页面 - 人员姓名:', personName)
-    console.log('ECG页面 - 映射名称:', mappingName)
+const handlePersonChange = (newId) => {
+  if (!deviceId.value) {
+    ecgDataQueue.value = []
+    subscribeToData()
+  }
+}
 
-    // 获取心电图数据
-    this.fetchECGData()
-
-    // 从Store获取历史统计数据
-    this.getHistoryStats()
-
-    // 设置定时刷新 - 每1秒刷新一次数据
-    this.startDataRefresh()
-  },
-  beforeDestroy() {
-    // 组件销毁前清理定时器
-    this.stopDataRefresh()
-  },
-  methods: {
-    ...mapActions(useDeviceStore, ['setCurrentDevice']),
-    async fetchECGData() {
-      try {
-        this.loading = !this.initialDataLoaded // 只在首次加载时显示loading
-        // TODO: ECG API 暂未设计完成，使用模拟数据
-        const res = null // await getDeviceECGData(this.deviceId)
-        if (res && Array.isArray(res) && res.length > 0) {
-          const latestData = res[0]
-
-          // 处理心电图数据
-          let ecgData = []
-          try {
-            // ECG数据可能存在于ecgData字段中
-            if (latestData.ecgData) {
-              // 尝试解析JSON字符串
-              if (typeof latestData.ecgData === 'string') {
-                try {
-                  const parsedData = JSON.parse(latestData.ecgData)
-                  if (Array.isArray(parsedData)) {
-                    ecgData = parsedData
-                  } else {
-                    // 如果解析后不是数组，尝试将字符串分割为数组
-                    ecgData = latestData.ecgData
-                      .replace(/^\[|\]$/g, '') // 移除开头和结尾的方括号
-                      .split(',')
-                      .map(str => parseFloat(str.trim()))
-                      .filter(num => !isNaN(num))
-                  }
-                } catch (e) {
-                  // 解析失败，尝试将字符串分割为数组
-                  ecgData = latestData.ecgData
-                    .replace(/^\[|\]$/g, '') // 移除开头和结尾的方括号
-                    .split(',')
-                    .map(str => parseFloat(str.trim()))
-                    .filter(num => !isNaN(num))
-                }
-              } else if (Array.isArray(latestData.ecgData)) {
-                // 如果已经是数组，直接使用
-                ecgData = latestData.ecgData
-              }
-            }
-
-            // 确保是有效的数组数据
-            if (!Array.isArray(ecgData) || ecgData.length === 0) {
-              console.warn('ECG数据不是有效数组或为空')
-            }
-          } catch (e) {
-            console.error('解析ECG数据失败:', e)
+const handleTimeWindowChange = () => {
+  // 窗口变化时，立即更新图表X轴范围
+  if (chartInstance) {
+      const now = Date.now()
+      chartInstance.setOption({
+          xAxis: {
+              min: now - timeWindow.value * 1000,
+              max: now
           }
+      })
+  }
+}
 
-          if (ecgData.length > 0) {
-            console.log('获取到有效的ECG数据，长度:', ecgData.length)
-            this.ecgWaveform = ecgData
-            this.lastUpdateTime = latestData.timestamp || new Date().toISOString()
+const togglePause = () => {
+  isPaused.value = !isPaused.value
+}
 
-            // 分析心电数据，更新心率状态
-            this.analyzeECGData(ecgData)
+const formatTime = (isoString) => {
+  if (!isoString) return '--'
+  const date = new Date(isoString)
+  return date.toLocaleTimeString()
+}
+
+const getHeartRateClass = (hr) => {
+  if (!hr) return ''
+  if (hr < 60 || hr > 100) return 'text-danger'
+  return 'text-success'
+}
+
+const getHeartRateStatusClass = (hr) => {
+  if (!hr) return 'status-normal'
+  if (hr < 60) return 'status-slow'
+  if (hr > 100) return 'status-fast'
+  return 'status-normal'
+}
+
+const getHeartRateStatusText = (hr) => {
+  if (!hr) return '等待数据'
+  if (hr < 60) return '心动过缓'
+  if (hr > 100) return '心动过速'
+  return '正常'
+}
+
+const signalQualityColor = (percentage) => {
+  if (percentage < 60) return '#F56C6C'
+  if (percentage < 80) return '#E6A23C'
+  return '#67C23A'
+}
+
+onMounted(() => {
+  initChart()
+  connectWebSocket()
+  
+  // 如果没有数据，也要定时更新X轴，保持时间窗口滚动
+  setInterval(() => {
+    if (chartInstance && !isPaused.value && ecgDataQueue.value.length === 0) {
+       const now = Date.now()
+       chartInstance.setOption({
+          xAxis: {
+              min: now - timeWindow.value * 1000,
+              max: now
           }
+       })
+    }
+  }, 1000)
+})
 
-          // 更新设备信息（如果存在）
-          if (latestData.radarDevice) {
-            this.deviceInfo = {
-              deviceName: latestData.radarDevice.deviceName || this.deviceInfo.deviceName,
-              location: latestData.radarDevice.location || this.deviceInfo.location,
-              status: latestData.radarDevice.status || this.deviceInfo.status,
-              model: latestData.radarDevice.model || this.deviceInfo.model,
-              type: latestData.radarDevice.type || this.deviceInfo.type
-            }
-          }
+onUnmounted(() => {
+  if (ws) {
+    ws.close()
+  }
+  stopHeartbeat()
+  window.removeEventListener('resize', resizeChart)
+  if (chartInstance) {
+    chartInstance.dispose()
+  }
+})
+</script>
 
-          // 标记初始数据已加载
-          this.initialDataLoaded = true
-        } else {
-          console.warn('API返回数据为空或格式不正确:', res)
-          // 如果数据为空，可以在此处添加备用方案
-        }
-      } catch (error) {
-        console.error('获取心电图数据失败:', error)
-        // 发生错误时可以在此处添加备用方案
-      } finally {
-        this.loading = false
-      }
-    },
-    formatTimestamp(timestamp) {
-      if (!timestamp) return '未知'
+<style scoped lang="scss">
+.ecg-monitor-page {
+  padding: 24px;
+  background-color: #f5f7fa;
+  min-height: calc(100vh - 84px);
+}
 
-      // 如果是ISO格式的时间字符串，直接格式化
-      try {
-        const date = new Date(timestamp)
-        return date.toLocaleString()
-      } catch (e) {
-        return timestamp
-      }
-    },
-    startDataRefresh() {
-      // 设置1秒刷新一次 - 更频繁地更新数据
-      this.refreshTimer = setInterval(() => {
-        this.fetchECGData()
-      }, 1000) // 1秒
-    },
-    stopDataRefresh() {
-      if (this.refreshTimer) {
-        clearInterval(this.refreshTimer)
-        this.refreshTimer = null
-      }
-    },
-    // 新增：从Store获取历史统计数据
-    getHistoryStats() {
-      // 从Vuex获取全局统计数据
-      const statsStore = useStatsStore()
-      const globalStats = statsStore.ecgStats
-      if (globalStats) {
-        this.updateHistoryStats(globalStats)
-      } else {
-        // 如果Vuex中没有数据，尝试从API获取
-        this.fetchECGStats()
-      }
-    },
-    // 新增：从API获取心电图统计数据
-    async fetchECGStats() {
-      try {
-        // 这里应该调用获取统计数据的API
-        // 示例使用默认数据
-        const statsData = {
-          tachycardia: { count: 8, duration: 35 },
-          bradycardia: { count: 6, duration: 20 },
-          arrhythmia: { count: 0, duration: 0 }
-        }
+.monitor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  background: white;
+  padding: 16px 24px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 
-        // 更新本地统计数据
-        this.updateHistoryStats(statsData)
+  .header-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
 
-        // 同步到Vuex
-        const statsStore = useStatsStore()
-        statsStore.updateECGStats(statsData)
-      } catch (error) {
-        console.error('获取心电图统计数据失败:', error)
-      }
-    },
-    // 新增：更新历史统计数据
-    updateHistoryStats(stats) {
-      // 心动过速
-      if (stats.tachycardia) {
-        this.historyStats[0].count = `${stats.tachycardia.count}次`
-        this.historyStats[0].duration = `总持续时间: ${stats.tachycardia.duration}min`
-      }
-
-      // 心动过缓
-      if (stats.bradycardia) {
-        this.historyStats[1].count = `${stats.bradycardia.count}次`
-        this.historyStats[1].duration = `总持续时间: ${stats.bradycardia.duration}min`
-      }
-
-      // 心律不齐
-      if (stats.arrhythmia) {
-        this.historyStats[2].count = `${stats.arrhythmia.count}次`
-        this.historyStats[2].duration = `总持续时间: ${stats.arrhythmia.duration}min`
-      }
-    },
-    // 新增：分析心电数据并更新统计
-    analyzeECGData(ecgData) {
-      // 简单实现：基于波峰数量和波形特征计算心率
-      // 在实际项目中，这部分应该有专业的心电图分析算法
-
-      try {
-        // 计算心率（粗略实现）
-        const sampleRate = 200 // 采样率200Hz
-        const peakCount = this.countPeaks(ecgData)
-        const dataLengthInSeconds = ecgData.length / sampleRate
-        const heartRate = Math.round((peakCount / dataLengthInSeconds) * 60)
-
-        // 更新心率
-        this.ecgRate = heartRate
-
-        // 判断心率状态
-        let status = 'normal'
-        let abnormality = null
-
-        if (heartRate > 100) {
-          status = 'fast'
-          abnormality = 'tachycardia'
-        } else if (heartRate < 60) {
-          status = 'slow'
-          abnormality = 'bradycardia'
-        }
-
-        // 检测心律不齐（简化实现）
-        const hasArrhythmia = this.detectArrhythmia(ecgData)
-        if (hasArrhythmia) {
-          abnormality = 'arrhythmia'
-        }
-
-        // 更新心率状态
-        this.ecgStatus = status
-
-        // 如果检测到异常，更新统计数据
-        if (abnormality) {
-          this.updateAbnormalityStats(abnormality)
-        }
-      } catch (error) {
-        console.error('心电数据分析失败:', error)
-      }
-    },
-    // 新增：计算心电图中的波峰数量
-    countPeaks(data) {
-      if (!data || data.length < 3) return 0
-
-      // 简单的波峰检测算法
-      const threshold = 0.5 // 波峰阈值
-      let peakCount = 0
-
-      for (let i = 1; i < data.length - 1; i++) {
-        if (data[i] > threshold && data[i] > data[i - 1] && data[i] > data[i + 1]) {
-          peakCount++
-        }
-      }
-
-      return peakCount
-    },
-    // 新增：检测心律不齐
-    detectArrhythmia(data) {
-      if (!data || data.length < 200) return false
-
-      // 简单的心律不齐检测算法（仅示例）
-      // 在实际项目中，这需要专业的心电图分析算法
-
-      // 计算R波间隔的变异性
-      const rPeaks = []
-      const threshold = 0.5
-
-      // 找出所有R波峰
-      for (let i = 1; i < data.length - 1; i++) {
-        if (data[i] > threshold && data[i] > data[i - 1] && data[i] > data[i + 1]) {
-          rPeaks.push(i)
-        }
-      }
-
-      // 至少需要3个R波才能计算变异性
-      if (rPeaks.length < 3) return false
-
-      // 计算RR间隔
-      const rrIntervals = []
-      for (let i = 1; i < rPeaks.length; i++) {
-        rrIntervals.push(rPeaks[i] - rPeaks[i - 1])
-      }
-
-      // 计算RR间隔的标准差
-      const avg = rrIntervals.reduce((sum, val) => sum + val, 0) / rrIntervals.length
-      const variance = rrIntervals.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / rrIntervals.length
-      const stdDev = Math.sqrt(variance)
-
-      // 标准差超过阈值认为有心律不齐
-      const variabilityThreshold = avg * 0.2 // 20%的变异视为心律不齐
-      return stdDev > variabilityThreshold
-    },
-    // 新增：更新异常统计
-    updateAbnormalityStats(type) {
-      // 获取当前的统计数据
-      const statsStore = useStatsStore()
-      const stats = { ...(statsStore.ecgStats) } || {
-        tachycardia: { count: 0, duration: 0 },
-        bradycardia: { count: 0, duration: 0 },
-        arrhythmia: { count: 0, duration: 0 }
-      }
-
-      // 更新对应类型的统计
-      if (type === 'tachycardia') {
-        stats.tachycardia.count++
-        stats.tachycardia.duration += 1 / 60 // 增加1秒，转换为分钟
-      } else if (type === 'bradycardia') {
-        stats.bradycardia.count++
-        stats.bradycardia.duration += 1 / 60 // 增加1秒，转换为分钟
-      } else if (type === 'arrhythmia') {
-        stats.arrhythmia.count++
-        stats.arrhythmia.duration += 1 / 60 // 增加1秒，转换为分钟
-      }
-
-      // 更新Vuex中的统计数据
-      statsStore.updateECGStats(stats)
-
-      // 更新本地统计显示
-      this.updateHistoryStats(stats)
+    .page-title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+      color: #1f2937;
     }
   }
 }
-</script>
+
+.monitor-content {
+  display: flex;
+  gap: 24px;
+  height: calc(100vh - 250px);
+  min-height: 500px;
+}
+
+.main-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.chart-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .last-update {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+  }
+
+  .waveform-container {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+  }
+}
+
+.metrics-grid {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.metric-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+
+  .metric-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+
+    .metric-title {
+      font-size: 14px;
+      color: #6b7280;
+      font-weight: 500;
+    }
+  }
+
+  .metric-value-large {
+    font-size: 36px;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1;
+    margin-bottom: 8px;
+
+    .unit {
+      font-size: 14px;
+      color: #9ca3af;
+      font-weight: 400;
+    }
+  }
+
+  .metric-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+}
+
+.status-indicator {
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+
+  &.status-normal {
+    background-color: #d1fae5;
+    color: #059669;
+  }
+
+  &.status-slow {
+    background-color: #fef3c7;
+    color: #d97706;
+  }
+
+  &.status-fast {
+    background-color: #fee2e2;
+    color: #dc2626;
+  }
+}
+
+.text-danger {
+  color: #ef4444 !important;
+}
+
+.text-success {
+  color: #10b981 !important;
+}
+
+.ml-2 {
+  margin-left: 8px;
+}
+
+.mt-1 {
+  margin-top: 4px;
+}
+
+.text-sm {
+  font-size: 12px;
+  color: #6b7280;
+}
+</style>
