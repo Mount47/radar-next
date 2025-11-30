@@ -6,7 +6,7 @@ import {
   deletePerson,
   getDepartments,
   searchPersonsByName
-} from '@/api/person'
+} from '@/api/persons/person'
 import { ElMessage } from 'element-plus'
 
 export const usePersonStore = defineStore('person', {

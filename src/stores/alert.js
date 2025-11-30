@@ -7,10 +7,10 @@ import {
   markFallAlertAsPending,
   markFallAlertAsResolved,
   markFallAlertAsFalseAlarm
-} from '@/api/fall-alert'
+} from '@/api/alerts/fall-alert'
 import {
   getVitalsAlerts
-} from '@/api/vitals-alert'
+} from '@/api/alerts/vitals-alert'
 
 export const useAlertStore = defineStore('alert', () => {
   // ==================== 跌倒警报状态 ====================

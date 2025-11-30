@@ -1,5 +1,5 @@
 // import { EventEmitter } from 'events'
-import { API_CONFIG } from '@/api/config'
+import { API_CONFIG } from '@/api/core/config'
 import { getDeviceType } from '@/utils/deviceConfig'
 
 // 简单的 EventEmitter 实现，替代 Node.js 的 events 模块

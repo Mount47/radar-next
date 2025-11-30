@@ -224,7 +224,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAlertStore } from '@/stores/alert'
 import { useUserStore } from '@/stores/user'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ALERT_STATUS_MAP, SEVERITY_MAP } from '@/api/fall-alert'
+import { ALERT_STATUS_MAP, SEVERITY_MAP } from '@/api/alerts/fall-alert'
 
 const alertStore = useAlertStore()
 const userStore = useUserStore()

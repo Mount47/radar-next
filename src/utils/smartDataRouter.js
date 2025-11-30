@@ -4,10 +4,10 @@
  */
 
 import WebSocketClient from '@/utils/websocket'
-import { getHistoryData, getHistoryStats } from '@/api/history'
-import { getAllVitalSigns, getLatestVitalSigns } from '@/api/vital'
-import { getAllPose, getLatestPose } from '@/api/posture'
-import { getAllECGData, getLatestECGData } from '@/api/ecg'
+// import { getHistoryData, getHistoryStats } from '@/api/history'
+import { getAllVitalSigns, getLatestVitalSigns } from '@/api/sensors/vital'
+import { getAllPose, getLatestPose } from '@/api/sensors/posture'
+// import { getAllECGData, getLatestECGData } from '@/api/ecg'
 
 class SmartDataRouter {
   constructor() {

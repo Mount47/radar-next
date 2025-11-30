@@ -129,7 +129,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAlertStore } from '@/stores/alert'
 import { useUserStore } from '@/stores/user'
-import { VITAL_ALERT_TYPE_MAP } from '@/api/vitals-alert'
+import { VITAL_ALERT_TYPE_MAP } from '@/api/alerts/vitals-alert'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()

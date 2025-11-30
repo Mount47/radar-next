@@ -91,7 +91,7 @@ async function getDevicesWithMappingStatus() {
     // 并行获取设备列表和映射关系
     const [devicesResponse, mappingsResponse] = await Promise.all([
       getDevices(),
-      import('@/api/person-device-mapping').then(module => module.getPersonDeviceMappings())
+      import('@/api/mappings/person-device-mapping').then(module => module.getPersonDeviceMappings())
     ])
     
     const devices = devicesResponse.data || []

@@ -262,7 +262,7 @@ import {
   updateDevice,
   deleteDevice,
   updateDeviceStatus
-} from '@/api/device'
+} from '@/api/devices/device'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Cpu, Platform, Tools } from '@element-plus/icons-vue'
 

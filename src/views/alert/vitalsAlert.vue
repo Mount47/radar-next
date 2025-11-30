@@ -194,7 +194,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAlertStore } from '@/stores/alert'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { VITAL_ALERT_TYPE_MAP, VITAL_SEVERITY_MAP } from '@/api/vitals-alert'
+import { VITAL_ALERT_TYPE_MAP, VITAL_SEVERITY_MAP } from '@/api/alerts/vitals-alert'
 
 const alertStore = useAlertStore()
 

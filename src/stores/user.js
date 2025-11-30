@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { login, logout, getInfo } from '@/api/user'
+import { login, logout, getInfo } from '@/api/core/user'
 import { getToken, setToken, removeToken } from '@/utils/auth'
 
 export const useUserStore = defineStore('user', {

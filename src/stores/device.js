@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { getDevices, addDevice, updateDevice, deleteDevice } from '@/api/device'
+import { getDevices, addDevice, updateDevice, deleteDevice } from '@/api/devices/device'
 import { ElMessage } from 'element-plus'
 
 export const useDeviceStore = defineStore('device', {

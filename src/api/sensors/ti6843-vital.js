@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import { API_CONFIG } from '@/api/config'
+import { API_CONFIG } from '@/api/core/config'
 
 // TI6843 Vital呼吸心跳传感器API接口
 // 基于TI6843_Vital_Frontend_API_Reference.md v2.0 (2025-10-16)

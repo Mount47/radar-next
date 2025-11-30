@@ -181,7 +181,7 @@ import {
   deletePerson as deletePersonAPI,
   getDepartments,
   batchDeletePersons
-} from '@/api/person'
+} from '@/api/persons/person'
 import * as echarts from 'echarts'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

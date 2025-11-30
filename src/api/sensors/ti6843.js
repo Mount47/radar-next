@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import { API_CONFIG } from '@/api/config'
+import { API_CONFIG } from '@/api/core/config'
 
 // TI6843雷达系统API接口
 // 用于TI6843位姿历史数据展示

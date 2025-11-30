@@ -94,9 +94,9 @@
 <script>
 import { ref, computed, onMounted, watch } from 'vue'
 import { Cpu, User, Monitor } from '@element-plus/icons-vue'
-import { getDevices } from '@/api/device'
-import { getPersons } from '@/api/person'
-import { getActivePersonDeviceMappings } from '@/api/r60abd1'
+import { getDevices } from '@/api/devices/device'
+import { getPersons } from '@/api/persons/person'
+import { getActivePersonDeviceMappings } from '@/api/sensors/r60abd1'
 import { getDeviceType } from '@/utils/deviceConfig'
 import dataManager from '@/utils/DataManager'
 

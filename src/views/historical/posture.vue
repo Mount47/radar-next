@@ -243,8 +243,8 @@ import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed } from 'v
 import { Search, RefreshLeft, User, Warning } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { getPersons } from '@/api/person'
-import { getTI6843PosturePersonHistoricalData, getTI6843PosturePersonHistoricalSummary, getTI6843PostureDeviceHistoricalData, getTI6843PostureDeviceHistoricalSummary } from '@/api/ti6843-posture'
+import { getPersons } from '@/api/persons/person'
+import { getTI6843PosturePersonHistoricalData, getTI6843PosturePersonHistoricalSummary, getTI6843PostureDeviceHistoricalData, getTI6843PostureDeviceHistoricalSummary } from '@/api/sensors/ti6843-posture'
 
 // 搜索表单
 const searchForm = reactive({

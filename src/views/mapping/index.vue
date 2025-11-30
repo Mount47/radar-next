@@ -422,9 +422,9 @@ import {
   cleanupInactiveMappings,
   checkApiSupport,
   adaptiveApiCall
-} from '@/api/person-device-mapping'
-import { getPersons } from '@/api/person'
-import { getDevices } from '@/api/device'
+} from '@/api/mappings/person-device-mapping'
+import { getPersons } from '@/api/persons/person'
+import { getDevices } from '@/api/devices/device'
 import { validateAndFormatMappings } from '@/utils/mapping-validation'
 import { Search, UserFilled, Monitor, Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -753,7 +753,7 @@ export default {
       try {
         // 尝试使用新的API获取包含绑定状态的设备信息
         try {
-          const { getDevicesForMapping } = await import('@/api/device')
+          const { getDevicesForMapping } = await import('@/api/devices/device')
           const { data } = await getDevicesForMapping()
           this.devices = data || []
           console.log('✅ 使用新API获取设备绑定状态:', this.devices)

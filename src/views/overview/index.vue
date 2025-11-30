@@ -224,7 +224,7 @@ import { useDeviceStore } from '@/stores/device'
 import { usePersonStore } from '@/stores/person'
 import { useAlertStore } from '@/stores/alert'
 import { useStatsStore } from '@/stores/stats'
-import { getPersonDeviceMappings } from '@/api/person-device-mapping'
+import { getPersonDeviceMappings } from '@/api/mappings/person-device-mapping'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()

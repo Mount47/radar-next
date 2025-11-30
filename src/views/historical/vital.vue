@@ -226,8 +226,8 @@ import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { Search, RefreshLeft, Monitor } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { getPersons } from '@/api/person'
-import { getTI6843PersonHistoricalData, getTI6843PersonHistoricalSummary, getTI6843DeviceHistoricalData, getTI6843DeviceHistoricalSummary } from '@/api/ti6843-vital'
+import { getPersons } from '@/api/persons/person'
+import { getTI6843PersonHistoricalData, getTI6843PersonHistoricalSummary, getTI6843DeviceHistoricalData, getTI6843DeviceHistoricalSummary } from '@/api/sensors/ti6843-vital'
 
 // 搜索表单
 const searchForm = reactive({

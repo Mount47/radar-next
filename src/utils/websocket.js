@@ -1,4 +1,4 @@
-import { API_CONFIG } from '@/api/config'
+import { API_CONFIG } from '@/api/core/config'
 
 class WebSocketClient {
   constructor(url) {

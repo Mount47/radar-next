@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import { API_CONFIG } from '@/api/config'
+import { API_CONFIG } from '@/api/core/config'
 
 // R60ABD1雷达系统API接口
 // 基于最新的R60ABD1_API_Complete_Documentation.md

@@ -363,7 +363,7 @@ import {
   unsubscribeFromTI6843Posture,
   sendTI6843PostureHeartbeat,
   formatPostureDataForDisplay
-} from '@/api/ti6843-posture'
+} from '@/api/sensors/ti6843-posture'
 // 导入跌倒警报API
 import {
   getActiveFallAlerts,
@@ -375,7 +375,7 @@ import {
   markFallAlertAsResolved,
   markFallAlertAsFalseAlarm,
   ALERT_STATUS_MAP
-} from '@/api/fall-alert'
+} from '@/api/alerts/fall-alert'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import DevicePersonSelector from '@/components/DevicePersonSelector.vue'
